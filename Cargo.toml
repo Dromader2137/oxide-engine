@@ -1,0 +1,10 @@
+[package]
+name = "simple-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vulkano = {}
+vulkano-shaders = {}
+image = {}
+winit = {}
