@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-vulkano = {}
-vulkano-shaders = {}
-image = {}
-winit = {}
+vulkano = "0.34.0"
+vulkano-shaders = "0.34.0"
+winit = "0.28.0"
+
+[profile.dev]
+opt-level = 1
