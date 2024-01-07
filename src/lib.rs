@@ -1,26 +1,20 @@
-use std::clone;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo,
-    SubpassBeginInfo, SubpassContents,
-};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
-use vulkano::device::{
-    Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
-};
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::Format;
-use vulkano::image::view::{ImageView, ImageViewCreateInfo, ImageViewType};
-use vulkano::image::{Image, ImageUsage, ImageCreateInfo, ImageCreateFlags, ImageType, ImageSubresourceRange, ImageAspects, SampleCount};
+use vulkano::image::view::ImageView;
+use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
-use vulkano::pipeline::graphics::depth_stencil::{DepthStencilState, DepthState};
+use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
@@ -28,27 +22,31 @@ use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo, Pipeline};
+use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
-use vulkano::shader::spirv::{bytes_to_words, ImageFormat};
+use vulkano::shader::spirv::bytes_to_words;
 use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use vulkano::swapchain::{self, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::sync::future::FenceSignalFuture;
 use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError};
+
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
+
+pub mod types;
+use types::vectors::*;
 
 #[derive(BufferContents, Vertex, Clone, Copy)]
 #[repr(C)]
 pub struct VertexData {
     #[format(R32G32B32_SFLOAT)]
-    pub position: [f32; 3],
+    pub position: Vec3f,
     #[format(R32G32_SFLOAT)]
-    pub uv: [f32; 2],
+    pub uv: Vec2f,
     #[format(R32G32B32_SFLOAT)]
-    pub normal: [f32; 3],
+    pub normal: Vec3f,
 }
 
 #[repr(C)]
@@ -56,10 +54,9 @@ pub struct Mesh {
     pub mesh: Vec<VertexData>,
     pub vertex: String,
     pub fragment: String,
-    pub buffer: Option<Subbuffer<[VertexData]>>
+    pub buffer: Option<Subbuffer<[VertexData]>>,
 }
 
-#[repr(C)]
 pub struct Shader {
     pub shader: Arc<ShaderModule>,
 }
@@ -69,7 +66,6 @@ pub enum ShaderType {
     Vertex,
 }
 
-#[repr(C)]
 pub struct ShaderData {
     pub shader_code: Vec<u32>,
     pub shader_type: ShaderType,
@@ -85,15 +81,14 @@ pub fn read_file_to_words(path: &str) -> Vec<u32> {
 fn load_shader_module(
     shaders: &HashMap<String, ShaderData>,
     device: &Arc<Device>,
-    name: &str
-    ) -> Arc<ShaderModule> {
+    name: &str,
+) -> Arc<ShaderModule> {
     unsafe {
         ShaderModule::new(
             device.clone(),
-            ShaderModuleCreateInfo::new(
-                shaders.get(name).unwrap().shader_code.as_slice()
-                )
-            ).unwrap()
+            ShaderModuleCreateInfo::new(shaders.get(name).unwrap().shader_code.as_slice()),
+        )
+        .unwrap()
     }
 }
 
@@ -101,7 +96,7 @@ pub fn select_physical_device(
     instance: &Arc<Instance>,
     surface: &Arc<Surface>,
     device_extensions: &DeviceExtensions,
-    ) -> (Arc<PhysicalDevice>, u32) {
+) -> (Arc<PhysicalDevice>, u32) {
     instance
         .enumerate_physical_devices()
         .expect("failed to enumerate physical devices")
@@ -114,16 +109,16 @@ pub fn select_physical_device(
                     q.queue_flags.contains(QueueFlags::GRAPHICS)
                         && p.surface_support(i as u32, surface).unwrap_or(false)
                 })
-            .map(|q| (p, q as u32))
+                .map(|q| (p, q as u32))
         })
-    .min_by_key(|(p, _)| match p.properties().device_type {
-        PhysicalDeviceType::DiscreteGpu => 0,
-        PhysicalDeviceType::IntegratedGpu => 1,
-        PhysicalDeviceType::VirtualGpu => 2,
-        PhysicalDeviceType::Cpu => 3,
-        _ => 4,
-    })
-    .expect("no device available")
+        .min_by_key(|(p, _)| match p.properties().device_type {
+            PhysicalDeviceType::DiscreteGpu => 0,
+            PhysicalDeviceType::IntegratedGpu => 1,
+            PhysicalDeviceType::VirtualGpu => 2,
+            PhysicalDeviceType::Cpu => 3,
+            _ => 4,
+        })
+        .expect("no device available")
 }
 
 fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<RenderPass> {
@@ -147,20 +142,30 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
             color: [color],
             depth_stencil: {depth},
         },
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 fn get_framebuffers(
-    images: &[Arc<Image>], 
+    images: &[Arc<Image>],
     render_pass: Arc<RenderPass>,
-    mamory_allocator: Arc<StandardMemoryAllocator>) -> Vec<Arc<Framebuffer>> {
+    mamory_allocator: Arc<StandardMemoryAllocator>,
+) -> Vec<Arc<Framebuffer>> {
     let depth_buffer = ImageView::new_default(
         Image::new(
             mamory_allocator.clone(),
-            ImageCreateInfo {image_type: ImageType::Dim2d, format: Format::D16_UNORM, extent: images[0].extent(), usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT, ..Default::default()},
-            AllocationCreateInfo::default()
-        ).unwrap(),
-    ).unwrap();
+            ImageCreateInfo {
+                image_type: ImageType::Dim2d,
+                format: Format::D16_UNORM,
+                extent: images[0].extent(),
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
+                ..Default::default()
+            },
+            AllocationCreateInfo::default(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
 
     images
         .iter()
@@ -172,10 +177,10 @@ fn get_framebuffers(
                     attachments: vec![view, depth_buffer.clone()],
                     ..Default::default()
                 },
-                )
-                .unwrap()
+            )
+            .unwrap()
         })
-    .collect::<Vec<_>>()
+        .collect::<Vec<_>>()
 }
 
 fn get_pipeline(
@@ -184,7 +189,7 @@ fn get_pipeline(
     fs: Arc<ShaderModule>,
     render_pass: Arc<RenderPass>,
     viewport: Viewport,
-    ) -> Arc<GraphicsPipeline> {
+) -> Arc<GraphicsPipeline> {
     let vs = vs.entry_point("main").unwrap();
     let fs = fs.entry_point("main").unwrap();
 
@@ -200,10 +205,10 @@ fn get_pipeline(
     let layout = PipelineLayout::new(
         device.clone(),
         PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-        .into_pipeline_layout_create_info(device.clone())
-        .unwrap(),
-        )
-        .unwrap();
+            .into_pipeline_layout_create_info(device.clone())
+            .unwrap(),
+    )
+    .unwrap();
 
     let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -219,7 +224,10 @@ fn get_pipeline(
                 ..Default::default()
             }),
             rasterization_state: Some(RasterizationState::default()),
-            depth_stencil_state: Some(DepthStencilState {depth: Some(DepthState::simple()), ..Default::default()}),
+            depth_stencil_state: Some(DepthStencilState {
+                depth: Some(DepthState::simple()),
+                ..Default::default()
+            }),
             multisample_state: Some(MultisampleState::default()),
             color_blend_state: Some(ColorBlendState::with_attachment_states(
                 subpass.num_color_attachments(),
@@ -228,7 +236,8 @@ fn get_pipeline(
             subpass: Some(subpass.into()),
             ..GraphicsPipelineCreateInfo::layout(layout)
         },
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 fn get_command_buffers(
@@ -237,7 +246,7 @@ fn get_command_buffers(
     pipelines: &HashMap<(String, String), Arc<GraphicsPipeline>>,
     framebuffers: &[Arc<Framebuffer>],
     meshes: &Vec<Mesh>,
-    ) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
+) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
     framebuffers
         .iter()
         .map(|framebuffer| {
@@ -245,8 +254,8 @@ fn get_command_buffers(
                 command_buffer_allocator,
                 queue.queue_family_index(),
                 CommandBufferUsage::MultipleSubmit,
-                )
-                .unwrap();
+            )
+            .unwrap();
 
             builder
                 .begin_render_pass(
@@ -258,12 +267,17 @@ fn get_command_buffers(
                         contents: SubpassContents::Inline,
                         ..Default::default()
                     },
-                    )
+                )
                 .unwrap();
 
             for mesh in meshes.iter() {
                 builder
-                    .bind_pipeline_graphics(pipelines.get(&(mesh.vertex.clone(), mesh.fragment.clone())).unwrap().clone())
+                    .bind_pipeline_graphics(
+                        pipelines
+                            .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
+                            .unwrap()
+                            .clone(),
+                    )
                     .unwrap()
                     .bind_vertex_buffers(0, mesh.buffer.clone().unwrap().clone())
                     .unwrap()
@@ -271,13 +285,11 @@ fn get_command_buffers(
                     .unwrap();
             }
 
-            builder
-                .end_render_pass(Default::default())
-                .unwrap();
+            builder.end_render_pass(Default::default()).unwrap();
 
             builder.build().unwrap()
         })
-    .collect()
+        .collect()
 }
 
 pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
@@ -291,8 +303,8 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             enabled_extensions: required_extensions,
             ..Default::default()
         },
-        )
-        .expect("failed to create instance");
+    )
+    .expect("failed to create instance");
 
     let window = Arc::new(WindowBuilder::new().build(&event_loop).unwrap());
 
@@ -316,8 +328,8 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             enabled_extensions: device_extensions, // new
             ..Default::default()
         },
-        )
-        .expect("failed to create device");
+    )
+    .expect("failed to create device");
 
     let queue = queues.next().unwrap();
 
@@ -344,29 +356,36 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 composite_alpha,
                 ..Default::default()
             },
-            )
-            .unwrap()
+        )
+        .unwrap()
     };
-    
+
     let standard_memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
     let render_pass = get_render_pass(device.clone(), swapchain.clone());
-    let framebuffers = get_framebuffers(&images, render_pass.clone(), standard_memory_allocator.clone());
+    let framebuffers = get_framebuffers(
+        &images,
+        render_pass.clone(),
+        standard_memory_allocator.clone(),
+    );
 
     for mesh in meshes.iter_mut() {
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-        mesh.buffer = Some(Buffer::from_iter(
-            memory_allocator, 
-            BufferCreateInfo {
-                usage: BufferUsage::VERTEX_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+        mesh.buffer = Some(
+            Buffer::from_iter(
+                memory_allocator,
+                BufferCreateInfo {
+                    usage: BufferUsage::VERTEX_BUFFER,
                     ..Default::default()
-            },
-            mesh.mesh.clone()
-            ).unwrap());
+                },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                mesh.mesh.clone(),
+            )
+            .unwrap(),
+        );
     }
 
     let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
@@ -382,7 +401,10 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     let mut loaded_shaders: HashMap<String, Arc<ShaderModule>> = HashMap::new();
 
     for (shader, _) in shaders.iter() {
-        loaded_shaders.insert(shader.to_string(), load_shader_module(&shaders, &device, shader));
+        loaded_shaders.insert(
+            shader.to_string(),
+            load_shader_module(&shaders, &device, shader),
+        );
     }
 
     let mut viewport = Viewport {
@@ -390,17 +412,20 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         extent: window.inner_size().into(),
         depth_range: 0.0..=1.0,
     };
-    
+
     let mut pipelines: HashMap<(String, String), Arc<GraphicsPipeline>> = HashMap::new();
-    
+
     for (name_vert, _) in vertex_shaders.iter() {
         for (name_frag, _) in fragment_shaders.iter() {
-            pipelines.insert((name_vert.to_string(), name_frag.to_string()), get_pipeline(
-                device.clone(), 
-                loaded_shaders.get(*name_vert).unwrap().clone(), 
-                loaded_shaders.get(*name_frag).unwrap().clone(), 
-                render_pass.clone(), 
-                viewport.clone())
+            pipelines.insert(
+                (name_vert.to_string(), name_frag.to_string()),
+                get_pipeline(
+                    device.clone(),
+                    loaded_shaders.get(*name_vert).unwrap().clone(),
+                    loaded_shaders.get(*name_frag).unwrap().clone(),
+                    render_pass.clone(),
+                    viewport.clone(),
+                ),
             );
         }
     }
@@ -414,7 +439,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         &pipelines,
         &framebuffers,
         &meshes,
-        );
+    );
 
     let mut window_resized = false;
     let mut recreate_swapchain = false;
@@ -447,10 +472,14 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         image_extent: new_dimensions.into(),
                         ..swapchain.create_info()
                     })
-                .expect("failed to recreate swapchain");
+                    .expect("failed to recreate swapchain");
 
                 swapchain = new_swapchain;
-                let new_framebuffers = get_framebuffers(&new_images, render_pass.clone(), standard_memory_allocator.clone());
+                let new_framebuffers = get_framebuffers(
+                    &new_images,
+                    render_pass.clone(),
+                    standard_memory_allocator.clone(),
+                );
 
                 if window_resized {
                     window_resized = false;
@@ -458,11 +487,12 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                     viewport.extent = new_dimensions.into();
                     for (pipeline, val) in pipelines.iter_mut() {
                         *val = get_pipeline(
-                            device.clone(), 
-                            loaded_shaders.get(&pipeline.0).unwrap().clone(), 
-                            loaded_shaders.get(&pipeline.1).unwrap().clone(), 
-                            render_pass.clone(), 
-                            viewport.clone())
+                            device.clone(),
+                            loaded_shaders.get(&pipeline.0).unwrap().clone(),
+                            loaded_shaders.get(&pipeline.1).unwrap().clone(),
+                            render_pass.clone(),
+                            viewport.clone(),
+                        )
                     }
                     command_buffers = get_command_buffers(
                         &command_buffer_allocator,
@@ -470,13 +500,13 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         &pipelines,
                         &new_framebuffers,
                         &meshes,
-                        );
+                    );
                 }
             }
 
             let (image_i, suboptimal, acquire_future) =
                 match swapchain::acquire_next_image(swapchain.clone(), None)
-                .map_err(Validated::unwrap)
+                    .map_err(Validated::unwrap)
                 {
                     Ok(r) => r,
                     Err(VulkanError::OutOfDate) => {
@@ -514,7 +544,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 .then_swapchain_present(
                     queue.clone(),
                     SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_i),
-                    )
+                )
                 .then_signal_fence_and_flush();
 
             fences[image_i as usize] = match future.map_err(Validated::unwrap) {
@@ -522,7 +552,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 Err(VulkanError::OutOfDate) => {
                     recreate_swapchain = true;
                     None
-                }    
+                }
                 Err(e) => {
                     println!("failed to flush future: {e}");
                     None
