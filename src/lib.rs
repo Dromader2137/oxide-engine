@@ -3,12 +3,15 @@ use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
+use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents};
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
-use vulkano::format::Format;
+use vulkano::format::{Format, self};
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo};
@@ -22,7 +25,7 @@ use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
 use vulkano::shader::spirv::bytes_to_words;
 use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
@@ -37,6 +40,7 @@ use winit::window::WindowBuilder;
 
 pub mod types;
 use types::vectors::*;
+use types::matrices::*;
 
 #[derive(BufferContents, Vertex, Clone, Copy)]
 #[repr(C)]
@@ -55,6 +59,13 @@ pub struct Mesh {
     pub vertex: String,
     pub fragment: String,
     pub buffer: Option<Subbuffer<[VertexData]>>,
+}
+
+#[derive(BufferContents, Clone, Copy)]
+#[repr(C)]
+pub struct VPData {
+    pub view: Matrix4f,
+    pub projection: Matrix4f,
 }
 
 pub struct Shader {
@@ -246,6 +257,7 @@ fn get_command_buffers(
     pipelines: &HashMap<(String, String), Arc<GraphicsPipeline>>,
     framebuffers: &[Arc<Framebuffer>],
     meshes: &Vec<Mesh>,
+    test_ds: &Arc<PersistentDescriptorSet>
 ) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
     framebuffers
         .iter()
@@ -271,13 +283,15 @@ fn get_command_buffers(
                 .unwrap();
 
             for mesh in meshes.iter() {
+                let pipeline =  pipelines
+                    .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
+                    .unwrap()
+                    .clone();
+
                 builder
-                    .bind_pipeline_graphics(
-                        pipelines
-                            .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
-                            .unwrap()
-                            .clone(),
-                    )
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .unwrap()
+                    .bind_descriptor_sets(PipelineBindPoint::Graphics, pipeline.layout().clone(), 0, test_ds.clone())
                     .unwrap()
                     .bind_vertex_buffers(0, mesh.buffer.clone().unwrap().clone())
                     .unwrap()
@@ -387,6 +401,23 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             .unwrap(),
         );
     }
+    
+    let vp_data = VPData {
+        view: Matrix4f::indentity(),
+        projection: Matrix4f::indentity()
+    };
+    let vp_buffer = Buffer::from_data(
+        standard_memory_allocator.clone(), 
+        BufferCreateInfo {
+            usage: BufferUsage::UNIFORM_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        vp_data
+    ).unwrap();
 
     let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
         .iter()
@@ -414,7 +445,6 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     };
 
     let mut pipelines: HashMap<(String, String), Arc<GraphicsPipeline>> = HashMap::new();
-
     for (name_vert, _) in vertex_shaders.iter() {
         for (name_frag, _) in fragment_shaders.iter() {
             pipelines.insert(
@@ -430,8 +460,14 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         }
     }
 
-    let command_buffer_allocator =
-        StandardCommandBufferAllocator::new(device.clone(), Default::default());
+    let descriptor_set_allocator = StandardDescriptorSetAllocator::new(device.clone(), Default::default());
+    let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
+
+    let desccriptor_set = PersistentDescriptorSet::new(
+        &descriptor_set_allocator,
+        pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(0).unwrap().clone(), 
+        [WriteDescriptorSet::buffer(0, vp_buffer.clone())], 
+        []).unwrap();
 
     let mut command_buffers = get_command_buffers(
         &command_buffer_allocator,
@@ -439,6 +475,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         &pipelines,
         &framebuffers,
         &meshes,
+        &desccriptor_set
     );
 
     let mut window_resized = false;
@@ -500,6 +537,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         &pipelines,
                         &new_framebuffers,
                         &meshes,
+                        &desccriptor_set
                     );
                 }
             }
