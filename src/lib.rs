@@ -405,24 +405,29 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         );
     }
 
-    let model_data = vec![Matrix4f::translation(Vec3f([0.0, 0.0, 0.0])); 2];
+    let mut model_data = vec![Matrix4f::translation(Vec3f([0.0, 0.0, -3.0])); 2];
 
-    let model_buffers: Vec<Subbuffer<Matrix4f>> = vec![Buffer::from_data(
-        standard_memory_allocator.clone(), 
-        BufferCreateInfo {
-            usage: BufferUsage::UNIFORM_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        model_data.get(0).unwrap().clone()
-    ).unwrap(); 2];
+    let mut model_buffers: Vec<Subbuffer<Matrix4f>> = Vec::new();
+    for data in model_data.iter() {
+        model_buffers.push(
+            Buffer::from_data(
+                standard_memory_allocator.clone(), 
+                BufferCreateInfo {
+                    usage: BufferUsage::UNIFORM_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                data.clone()
+            ).unwrap()
+        )
+    }
     
     let vp_data = VPData {
         view: Matrix4f::indentity(),
-        projection: Matrix4f::indentity()
+        projection: Matrix4f::perspective(1.0, 1.0, 0.01, 10.0)
     };
     let vp_buffer = Buffer::from_data(
         standard_memory_allocator.clone(), 
@@ -487,12 +492,18 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         [WriteDescriptorSet::buffer(0, vp_buffer.clone())], 
         []).unwrap();
     
-    let m_set = PersistentDescriptorSet::new(
-        &descriptor_set_allocator,
-        pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(1).unwrap().clone(), 
-        [WriteDescriptorSet::buffer(0, model_buffer.clone())], 
-        []).unwrap();
-
+    let mut m_sets: Vec<Arc<PersistentDescriptorSet>> = Vec::new();
+    for buff in model_buffers.iter() {
+        m_sets.push(
+            PersistentDescriptorSet::new(
+                &descriptor_set_allocator,
+                pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(1).unwrap().clone(), 
+                [WriteDescriptorSet::buffer(0, buff.clone())], 
+                []
+            ).unwrap()
+        )
+    }
+    
     let mut command_buffers = get_command_buffers(
         &command_buffer_allocator,
         &queue,
@@ -500,7 +511,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         &framebuffers,
         &meshes,
         &vp_set,
-        &m_set
+        &m_sets
     );
 
     let mut window_resized = false;
@@ -563,7 +574,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         &new_framebuffers,
                         &meshes,
                         &vp_set,
-                        &m_set
+                        &m_sets
                     );
                 }
             }
