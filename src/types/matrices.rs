@@ -1,6 +1,6 @@
 use crate::types::vectors::*; 
 
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Debug)]
 #[repr(C)]
 pub struct Matrix4f([[f32; 4]; 4]);
 
@@ -30,8 +30,17 @@ impl Matrix4f {
                   [0.0, 0.0, b, 0.0]])
     }
 
-    pub fn look_at(eye: Vec3f, dir: Vec3f, up: Vec3f) {
-        let f = dir.normalize();
-        
+    pub fn look_at(mut eye: Vec3f, mut dir: Vec3f, up: Vec3f) -> Matrix4f {
+        let mut f = dir.normalize();
+        let mut s = f.cross(up).normalize();
+        let mut u = s.cross(f);
+        println!("{:?}", f);
+        println!("{:?}", s);
+        println!("{:?}", u);
+
+        Matrix4f([[*s.x(), *s.y(), *s.z(), -eye.dot(s)],
+                  [*u.x(), *u.y(), *u.z(), -eye.dot(u)],
+                  [-*f.x(), -*f.y(), -*f.z(), eye.dot(f)],
+                  [0.0, 0.0, 0.0, 1.0]])
     }
 }

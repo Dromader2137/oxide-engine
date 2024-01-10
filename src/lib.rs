@@ -2,16 +2,16 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
+use std::time;
 
-use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents};
-use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
-use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet, DescriptorSet};
+use vulkano::descriptor_set::allocator::{StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
-use vulkano::format::{Format, self};
+use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo};
@@ -251,14 +251,19 @@ fn get_pipeline(
     .unwrap()
 }
 
+static mut dbg: f32 = -3.0;
+
 fn get_command_buffers(
     command_buffer_allocator: &StandardCommandBufferAllocator,
+    descriptor_set_allocator: &StandardDescriptorSetAllocator,
     queue: &Arc<Queue>,
     pipelines: &HashMap<(String, String), Arc<GraphicsPipeline>>,
     framebuffers: &[Arc<Framebuffer>],
     meshes: &Vec<Mesh>,
     vp_set: &Arc<PersistentDescriptorSet>,
-    m_set: &Vec<Arc<PersistentDescriptorSet>>
+    m_set: &Vec<Arc<PersistentDescriptorSet>>,
+    m_buffer: &Vec<Subbuffer<Matrix4f>>,
+    m_data: &Vec<Arc<Matrix4f>>
 ) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
     framebuffers
         .iter()
@@ -284,17 +289,25 @@ fn get_command_buffers(
                 .unwrap();
 
             for (i, mesh) in meshes.iter().enumerate() {
+
                 let pipeline =  pipelines
                     .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
                     .unwrap()
                     .clone();
+                
+                let model_set = PersistentDescriptorSet::new(
+                    descriptor_set_allocator, 
+                    pipeline.layout().set_layouts().get(1).unwrap().clone(), 
+                    [WriteDescriptorSet::buffer(0, m_buffer.get(i).unwrap().clone())], 
+                    []).unwrap();
+
 
                 builder
                     .bind_pipeline_graphics(pipeline.clone())
                     .unwrap()
                     .bind_descriptor_sets(PipelineBindPoint::Graphics, 
                                           pipeline.layout().clone(), 0, 
-                                          (vp_set.clone(), m_set.get(i).unwrap().clone()))
+                                          (vp_set.clone(), model_set.clone()))
                     .unwrap()
                     .bind_vertex_buffers(0, mesh.buffer.clone().unwrap().clone())
                     .unwrap()
@@ -303,6 +316,12 @@ fn get_command_buffers(
             }
 
             builder.end_render_pass(Default::default()).unwrap();
+
+            for (i, _) in meshes.iter().enumerate() {
+                builder
+                .update_buffer(m_buffer.get(i).unwrap().clone(), m_data.get(i).unwrap().clone())
+                .unwrap();
+            }
 
             builder.build().unwrap()
         })
@@ -405,30 +424,36 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         );
     }
 
-    let mut model_data = vec![Matrix4f::translation(Vec3f([0.0, 0.0, -3.0])); 2];
+    let mut model_data = vec![Arc::new(Matrix4f::translation(Vec3f([0.0, 0.0, -1.0]))); 2];
 
     let mut model_buffers: Vec<Subbuffer<Matrix4f>> = Vec::new();
-    for data in model_data.iter() {
+    for i in (0..2).step_by(1) {
+        println!("{}", i);
         model_buffers.push(
             Buffer::from_data(
                 standard_memory_allocator.clone(), 
                 BufferCreateInfo {
-                    usage: BufferUsage::UNIFORM_BUFFER,
+                    usage: BufferUsage::UNIFORM_BUFFER | BufferUsage::TRANSFER_DST,
                     ..Default::default()
                 },
                 AllocationCreateInfo {
                     memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
-                data.clone()
+                Matrix4f::translation(Vec3f([0.0, 0.0, 0.0]))
             ).unwrap()
         )
     }
-    
+
+
     let vp_data = VPData {
-        view: Matrix4f::indentity(),
-        projection: Matrix4f::perspective(1.0, 1.0, 0.01, 10.0)
+        view: Matrix4f::look_at(
+                  Vec3f([0.0, 0.0, 1.0]), 
+                  Vec3f([0.0, 0.0, -1.0]), 
+                  Vec3f([0.0, 1.0, 0.0])),
+        projection: Matrix4f::perspective(1.57, 1.0, 0.01, 10.0)
     };
+    println!("{:?}", vp_data.view);
     let vp_buffer = Buffer::from_data(
         standard_memory_allocator.clone(), 
         BufferCreateInfo {
@@ -506,12 +531,15 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     
     let mut command_buffers = get_command_buffers(
         &command_buffer_allocator,
+        &descriptor_set_allocator,
         &queue,
         &pipelines,
         &framebuffers,
         &meshes,
         &vp_set,
-        &m_sets
+        &m_sets,
+        &model_buffers,
+        &model_data
     );
 
     let mut window_resized = false;
@@ -569,16 +597,26 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                     }
                     command_buffers = get_command_buffers(
                         &command_buffer_allocator,
+                        &descriptor_set_allocator,
                         &queue,
                         &pipelines,
                         &new_framebuffers,
                         &meshes,
                         &vp_set,
-                        &m_sets
+                        &m_sets,
+                        &model_buffers,
+                        &model_data
                     );
                 }
             }
 
+            unsafe {
+            *model_data.get_mut(0).unwrap() = Arc::new(Matrix4f::translation(Vec3f([0.0, 0.0, dbg.clone()])));
+            *model_data.get_mut(1).unwrap() = Arc::new(Matrix4f::translation(Vec3f([0.0, 0.0, dbg.clone()])));
+            dbg += 0.001;
+            dbg %= 5.0;
+            println!("{:?}", dbg);
+            }
             let (image_i, suboptimal, acquire_future) =
                 match swapchain::acquire_next_image(swapchain.clone(), None)
                     .map_err(Validated::unwrap)
