@@ -257,7 +257,8 @@ fn get_command_buffers(
     pipelines: &HashMap<(String, String), Arc<GraphicsPipeline>>,
     framebuffers: &[Arc<Framebuffer>],
     meshes: &Vec<Mesh>,
-    test_ds: &Arc<PersistentDescriptorSet>
+    vp_set: &Arc<PersistentDescriptorSet>,
+    m_set: &Vec<Arc<PersistentDescriptorSet>>
 ) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
     framebuffers
         .iter()
@@ -282,7 +283,7 @@ fn get_command_buffers(
                 )
                 .unwrap();
 
-            for mesh in meshes.iter() {
+            for (i, mesh) in meshes.iter().enumerate() {
                 let pipeline =  pipelines
                     .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
                     .unwrap()
@@ -291,7 +292,9 @@ fn get_command_buffers(
                 builder
                     .bind_pipeline_graphics(pipeline.clone())
                     .unwrap()
-                    .bind_descriptor_sets(PipelineBindPoint::Graphics, pipeline.layout().clone(), 0, test_ds.clone())
+                    .bind_descriptor_sets(PipelineBindPoint::Graphics, 
+                                          pipeline.layout().clone(), 0, 
+                                          (vp_set.clone(), m_set.get(i).unwrap().clone()))
                     .unwrap()
                     .bind_vertex_buffers(0, mesh.buffer.clone().unwrap().clone())
                     .unwrap()
@@ -401,6 +404,21 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             .unwrap(),
         );
     }
+
+    let model_data = vec![Matrix4f::translation(Vec3f([0.0, 0.0, 0.0])); 2];
+
+    let model_buffers: Vec<Subbuffer<Matrix4f>> = vec![Buffer::from_data(
+        standard_memory_allocator.clone(), 
+        BufferCreateInfo {
+            usage: BufferUsage::UNIFORM_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        model_data.get(0).unwrap().clone()
+    ).unwrap(); 2];
     
     let vp_data = VPData {
         view: Matrix4f::indentity(),
@@ -463,10 +481,16 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     let descriptor_set_allocator = StandardDescriptorSetAllocator::new(device.clone(), Default::default());
     let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
-    let desccriptor_set = PersistentDescriptorSet::new(
+    let vp_set = PersistentDescriptorSet::new(
         &descriptor_set_allocator,
         pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(0).unwrap().clone(), 
         [WriteDescriptorSet::buffer(0, vp_buffer.clone())], 
+        []).unwrap();
+    
+    let m_set = PersistentDescriptorSet::new(
+        &descriptor_set_allocator,
+        pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(1).unwrap().clone(), 
+        [WriteDescriptorSet::buffer(0, model_buffer.clone())], 
         []).unwrap();
 
     let mut command_buffers = get_command_buffers(
@@ -475,7 +499,8 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         &pipelines,
         &framebuffers,
         &meshes,
-        &desccriptor_set
+        &vp_set,
+        &m_set
     );
 
     let mut window_resized = false;
@@ -537,7 +562,8 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         &pipelines,
                         &new_framebuffers,
                         &meshes,
-                        &desccriptor_set
+                        &vp_set,
+                        &m_set
                     );
                 }
             }
