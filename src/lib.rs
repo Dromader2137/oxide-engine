@@ -4,9 +4,11 @@ use std::io::Read;
 use std::sync::Arc;
 use std::time;
 
+use bytemuck::{Pod, Zeroable};
+use types::buffers::UpdatableBuffer;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, CopyBufferInfo};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet, DescriptorSet};
 use vulkano::descriptor_set::allocator::{StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
@@ -66,6 +68,12 @@ pub struct Mesh {
 pub struct VPData {
     pub view: Matrix4f,
     pub projection: Matrix4f,
+}
+
+#[derive(Pod, Zeroable, Clone, Copy)]
+#[repr(C)]
+pub struct ModelData {
+    pub translation: Matrix4f
 }
 
 pub struct Shader {
@@ -261,9 +269,7 @@ fn get_command_buffers(
     framebuffers: &[Arc<Framebuffer>],
     meshes: &Vec<Mesh>,
     vp_set: &Arc<PersistentDescriptorSet>,
-    m_set: &Vec<Arc<PersistentDescriptorSet>>,
-    m_buffer: &Vec<Subbuffer<Matrix4f>>,
-    m_data: &Vec<Arc<Matrix4f>>
+    m_buffer: &Vec<UpdatableBuffer<ModelData>>,
 ) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
     framebuffers
         .iter()
@@ -274,6 +280,15 @@ fn get_command_buffers(
                 CommandBufferUsage::MultipleSubmit,
             )
             .unwrap();
+
+            for buff in m_buffer.iter() {
+                builder
+                    .copy_buffer(
+                        CopyBufferInfo::buffers(buff.staging_buffer.clone(),
+                                                buff.main_buffer.clone())
+                    )
+                    .unwrap();
+            }
 
             builder
                 .begin_render_pass(
@@ -298,7 +313,7 @@ fn get_command_buffers(
                 let model_set = PersistentDescriptorSet::new(
                     descriptor_set_allocator, 
                     pipeline.layout().set_layouts().get(1).unwrap().clone(), 
-                    [WriteDescriptorSet::buffer(0, m_buffer.get(i).unwrap().clone())], 
+                    [WriteDescriptorSet::buffer(0, m_buffer.get(i).unwrap().main_buffer.clone())], 
                     []).unwrap();
 
 
@@ -316,13 +331,6 @@ fn get_command_buffers(
             }
 
             builder.end_render_pass(Default::default()).unwrap();
-
-            for (i, _) in meshes.iter().enumerate() {
-                builder
-                .update_buffer(m_buffer.get(i).unwrap().clone(), m_data.get(i).unwrap().clone())
-                .unwrap();
-            }
-
             builder.build().unwrap()
         })
         .collect()
@@ -424,25 +432,15 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         );
     }
 
-    let mut model_data = vec![Arc::new(Matrix4f::translation(Vec3f([0.0, 0.0, -1.0]))); 2];
+    let mut model_data = vec![Matrix4f::translation(Vec3f([0.0, 0.0, -1.0])); 2];
 
-    let mut model_buffers: Vec<Subbuffer<Matrix4f>> = Vec::new();
+    let mut model_buffers: Vec<UpdatableBuffer<ModelData>> = Vec::new();
     for i in (0..2).step_by(1) {
         println!("{}", i);
         model_buffers.push(
-            Buffer::from_data(
-                standard_memory_allocator.clone(), 
-                BufferCreateInfo {
-                    usage: BufferUsage::UNIFORM_BUFFER | BufferUsage::TRANSFER_DST,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                Matrix4f::translation(Vec3f([0.0, 0.0, 0.0]))
-            ).unwrap()
-        )
+            UpdatableBuffer::new(&device.clone(), BufferUsage::UNIFORM_BUFFER)
+        );
+        model_buffers.last_mut().unwrap().write(ModelData {translation: *model_data.get(i).unwrap()});
     }
 
 
@@ -517,18 +515,6 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         [WriteDescriptorSet::buffer(0, vp_buffer.clone())], 
         []).unwrap();
     
-    let mut m_sets: Vec<Arc<PersistentDescriptorSet>> = Vec::new();
-    for buff in model_buffers.iter() {
-        m_sets.push(
-            PersistentDescriptorSet::new(
-                &descriptor_set_allocator,
-                pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(1).unwrap().clone(), 
-                [WriteDescriptorSet::buffer(0, buff.clone())], 
-                []
-            ).unwrap()
-        )
-    }
-    
     let mut command_buffers = get_command_buffers(
         &command_buffer_allocator,
         &descriptor_set_allocator,
@@ -537,9 +523,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         &framebuffers,
         &meshes,
         &vp_set,
-        &m_sets,
         &model_buffers,
-        &model_data
     );
 
     let mut window_resized = false;
@@ -603,20 +587,11 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         &new_framebuffers,
                         &meshes,
                         &vp_set,
-                        &m_sets,
                         &model_buffers,
-                        &model_data
                     );
                 }
             }
 
-            unsafe {
-            *model_data.get_mut(0).unwrap() = Arc::new(Matrix4f::translation(Vec3f([0.0, 0.0, dbg.clone()])));
-            *model_data.get_mut(1).unwrap() = Arc::new(Matrix4f::translation(Vec3f([0.0, 0.0, dbg.clone()])));
-            dbg += 0.001;
-            dbg %= 5.0;
-            println!("{:?}", dbg);
-            }
             let (image_i, suboptimal, acquire_future) =
                 match swapchain::acquire_next_image(swapchain.clone(), None)
                     .map_err(Validated::unwrap)
@@ -649,6 +624,14 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 // Use the existing FenceSignalFuture
                 Some(fence) => fence.boxed(),
             };
+
+            unsafe {
+                model_buffers.get_mut(0).unwrap().write(
+                    ModelData { translation: Matrix4f::translation(Vec3f([0.0, 0.0, dbg])) }
+                );
+                dbg += 0.01;
+                dbg %= 5.0;
+            }
 
             let future = previous_future
                 .join(acquire_future)
