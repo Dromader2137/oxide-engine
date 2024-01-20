@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use bytemuck::Pod;
-use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents}, device::Device, memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter}};
+use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
+use vulkano::device::Device;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 
 pub struct UpdatableBuffer<DataType> {
     pub main_buffer: Subbuffer<DataType>,
@@ -44,7 +46,11 @@ where
     }
 
     pub fn write(&mut self, data: DataType) {
-        let mut content = self.staging_buffer.write().unwrap();
-        *content = data;
+        match self.staging_buffer.write() {
+            Ok(mut content) => {
+                *content = data;
+            },
+            Err(_) => println!("Failed buffer write!")
+        }
     }
 }

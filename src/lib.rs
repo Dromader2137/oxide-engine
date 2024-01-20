@@ -2,15 +2,14 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
-use std::time;
 
 use bytemuck::{Pod, Zeroable};
 use types::buffers::UpdatableBuffer;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, CopyBufferInfo};
-use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet, DescriptorSet};
-use vulkano::descriptor_set::allocator::{StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo};
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::Format;
@@ -63,7 +62,7 @@ pub struct Mesh {
     pub buffer: Option<Subbuffer<[VertexData]>>,
 }
 
-#[derive(BufferContents, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Copy)]
 #[repr(C)]
 pub struct VPData {
     pub view: Matrix4f,
@@ -151,7 +150,7 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
                 store_op: Store,
             },
             depth: {
-                format: Format::D16_UNORM,
+                format: Format::D32_SFLOAT,
                 samples: 1,
                 load_op: Clear,
                 store_op: DontCare,
@@ -175,7 +174,7 @@ fn get_framebuffers(
             mamory_allocator.clone(),
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
-                format: Format::D16_UNORM,
+                format: Format::D32_SFLOAT,
                 extent: images[0].extent(),
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
                 ..Default::default()
@@ -259,7 +258,7 @@ fn get_pipeline(
     .unwrap()
 }
 
-static mut dbg: f32 = -3.0;
+static mut DBG: f32 = 3.0;
 
 fn get_command_buffers(
     command_buffer_allocator: &StandardCommandBufferAllocator,
@@ -268,7 +267,7 @@ fn get_command_buffers(
     pipelines: &HashMap<(String, String), Arc<GraphicsPipeline>>,
     framebuffers: &[Arc<Framebuffer>],
     meshes: &Vec<Mesh>,
-    vp_set: &Arc<PersistentDescriptorSet>,
+    vp_buffer: &UpdatableBuffer<VPData>,
     m_buffer: &Vec<UpdatableBuffer<ModelData>>,
 ) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
     framebuffers
@@ -291,6 +290,11 @@ fn get_command_buffers(
             }
 
             builder
+                .copy_buffer(
+                    CopyBufferInfo::buffers(vp_buffer.staging_buffer.clone(), 
+                                            vp_buffer.main_buffer.clone())
+                )   
+                .unwrap()
                 .begin_render_pass(
                     RenderPassBeginInfo {
                         clear_values: vec![Some([0.1, 0.1, 0.1, 1.0].into()), Some(1f32.into())],
@@ -310,7 +314,13 @@ fn get_command_buffers(
                     .unwrap()
                     .clone();
                 
-                let model_set = PersistentDescriptorSet::new(
+                let vp_set = PersistentDescriptorSet::new(
+                    descriptor_set_allocator, 
+                    pipeline.layout().set_layouts().get(0).unwrap().clone(), 
+                    [WriteDescriptorSet::buffer(0, vp_buffer.main_buffer.clone())], 
+                    []).unwrap();
+
+                let m_set = PersistentDescriptorSet::new(
                     descriptor_set_allocator, 
                     pipeline.layout().set_layouts().get(1).unwrap().clone(), 
                     [WriteDescriptorSet::buffer(0, m_buffer.get(i).unwrap().main_buffer.clone())], 
@@ -322,7 +332,7 @@ fn get_command_buffers(
                     .unwrap()
                     .bind_descriptor_sets(PipelineBindPoint::Graphics, 
                                           pipeline.layout().clone(), 0, 
-                                          (vp_set.clone(), model_set.clone()))
+                                          (vp_set.clone(), m_set.clone()))
                     .unwrap()
                     .bind_vertex_buffers(0, mesh.buffer.clone().unwrap().clone())
                     .unwrap()
@@ -432,38 +442,25 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         );
     }
 
-    let mut model_data = vec![Matrix4f::translation(Vec3f([0.0, 0.0, -1.0])); 2];
-
     let mut model_buffers: Vec<UpdatableBuffer<ModelData>> = Vec::new();
-    for i in (0..2).step_by(1) {
-        println!("{}", i);
+    for _ in (0..2).step_by(1) {
         model_buffers.push(
             UpdatableBuffer::new(&device.clone(), BufferUsage::UNIFORM_BUFFER)
         );
-        model_buffers.last_mut().unwrap().write(ModelData {translation: *model_data.get(i).unwrap()});
+        model_buffers.last_mut().unwrap().write(ModelData {translation: Matrix4f::translation(Vec3f([0.0, 0.0, -1.0]))});
     }
 
 
     let vp_data = VPData {
         view: Matrix4f::look_at(
+                  Vec3f([0.0, 0.0, 0.0]), 
                   Vec3f([0.0, 0.0, 1.0]), 
-                  Vec3f([0.0, 0.0, -1.0]), 
                   Vec3f([0.0, 1.0, 0.0])),
-        projection: Matrix4f::perspective(1.57, 1.0, 0.01, 10.0)
+        projection: Matrix4f::perspective((60.0_f32).to_radians(), 1.0, 0.1, 10.0)
     };
-    println!("{:?}", vp_data.view);
-    let vp_buffer = Buffer::from_data(
-        standard_memory_allocator.clone(), 
-        BufferCreateInfo {
-            usage: BufferUsage::UNIFORM_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        vp_data
-    ).unwrap();
+    let mut vp_buffer: UpdatableBuffer<VPData> = 
+        UpdatableBuffer::new(&device.clone(), BufferUsage::UNIFORM_BUFFER);
+    vp_buffer.write(vp_data);
 
     let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
         .iter()
@@ -509,12 +506,6 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     let descriptor_set_allocator = StandardDescriptorSetAllocator::new(device.clone(), Default::default());
     let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
-    let vp_set = PersistentDescriptorSet::new(
-        &descriptor_set_allocator,
-        pipelines.get(&("simple".to_string(), "uv".to_string())).unwrap().layout().set_layouts().get(0).unwrap().clone(), 
-        [WriteDescriptorSet::buffer(0, vp_buffer.clone())], 
-        []).unwrap();
-    
     let mut command_buffers = get_command_buffers(
         &command_buffer_allocator,
         &descriptor_set_allocator,
@@ -522,7 +513,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         &pipelines,
         &framebuffers,
         &meshes,
-        &vp_set,
+        &vp_buffer,
         &model_buffers,
     );
 
@@ -586,7 +577,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                         &pipelines,
                         &new_framebuffers,
                         &meshes,
-                        &vp_set,
+                        &vp_buffer,
                         &model_buffers,
                     );
                 }
@@ -624,13 +615,32 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 // Use the existing FenceSignalFuture
                 Some(fence) => fence.boxed(),
             };
+            
+            // Waiting for all fences to be able to write to buffers
+            for fence in fences.iter_mut() {
+                let _ = match fence.as_mut() {
+                    Some(val) => val.wait(None).unwrap(),
+                    _ => (), 
+                };
+            }
 
             unsafe {
                 model_buffers.get_mut(0).unwrap().write(
-                    ModelData { translation: Matrix4f::translation(Vec3f([0.0, 0.0, dbg])) }
+                    ModelData { translation: Matrix4f::translation(Vec3f([DBG/5.0, 0.0, DBG])) }
                 );
-                dbg += 0.01;
-                dbg %= 5.0;
+                model_buffers.get_mut(1).unwrap().write(
+                    ModelData { translation: Matrix4f::translation(Vec3f([0.0, 0.0, DBG])) }
+                );
+                // vp_buffer.write(
+                //     VPData { 
+                //         view: Matrix4f::look_at(Vec3f([0.0, 0.0, 0.0]), Vec3f([(DBG*3.0).sin()/2.0, 0.0, 1.0]), Vec3f([0.0, 1.0, 0.0])),
+                //         projection: vp_data.projection,
+                //     }
+                // );
+                DBG -= 0.01;
+                if DBG < 0.0 {
+                    DBG = 10.0
+                }
             }
 
             let future = previous_future
