@@ -451,7 +451,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     }
 
 
-    let vp_data = VPData {
+    let mut vp_data = VPData {
         view: Matrix4f::look_at(
                   Vec3f([0.0, 0.0, 0.0]), 
                   Vec3f([0.0, 0.0, 1.0]), 
@@ -559,7 +559,8 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
 
                 if window_resized {
                     window_resized = false;
-
+                    
+                    vp_data.projection = Matrix4f::perspective((60.0_f32).to_radians(), (new_dimensions.width as f32) / (new_dimensions.height as f32), 0.1, 10.0);
                     viewport.extent = new_dimensions.into();
                     for (pipeline, val) in pipelines.iter_mut() {
                         *val = get_pipeline(
@@ -631,12 +632,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 model_buffers.get_mut(1).unwrap().write(
                     ModelData { translation: Matrix4f::translation(Vec3f([0.0, 0.0, DBG])) }
                 );
-                // vp_buffer.write(
-                //     VPData { 
-                //         view: Matrix4f::look_at(Vec3f([0.0, 0.0, 0.0]), Vec3f([(DBG*3.0).sin()/2.0, 0.0, 1.0]), Vec3f([0.0, 1.0, 0.0])),
-                //         projection: vp_data.projection,
-                //     }
-                // );
+                vp_buffer.write(vp_data);
                 DBG -= 0.01;
                 if DBG < 0.0 {
                     DBG = 10.0
