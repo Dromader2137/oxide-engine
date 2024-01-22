@@ -14,7 +14,7 @@ use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
-use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
+use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
@@ -28,7 +28,7 @@ use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
-use vulkano::shader::spirv::bytes_to_words;
+use vulkano::shader::spirv::{bytes_to_words, ImageFormat};
 use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use vulkano::swapchain::{self, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::sync::future::FenceSignalFuture;
@@ -143,12 +143,18 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
     vulkano::single_pass_renderpass!(
         device,
         attachments: {
-            color: {
+            inter: {
                 format: swapchain.image_format(), // set the format the same as the swapchain
                 samples: 1,
                 load_op: Clear,
                 store_op: Store,
             },
+            // color: {
+            //     format: swapchain.image_format(), // set the format the same as the swapchain
+            //     samples: 1,
+            //     load_op: Clear,
+            //     store_op: Store,
+            // },
             depth: {
                 format: Format::D32_SFLOAT,
                 samples: 1,
@@ -157,7 +163,8 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
             }
         },
         pass: {
-            color: [color],
+            color: [inter],
+            // color_resolve: [color],
             depth_stencil: {depth},
         },
     )
@@ -177,6 +184,7 @@ fn get_framebuffers(
                 format: Format::D32_SFLOAT,
                 extent: images[0].extent(),
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
+                samples: SampleCount::Sample1,
                 ..Default::default()
             },
             AllocationCreateInfo::default(),
@@ -185,14 +193,44 @@ fn get_framebuffers(
     )
     .unwrap();
 
+
     images
         .iter()
         .map(|image| {
-            let view = ImageView::new_default(image.clone()).unwrap();
+            let view = ImageView::new_default(
+                Image::new(
+                    mamory_allocator.clone(),
+                    ImageCreateInfo {
+                        image_type: image.image_type(),
+                        format: image.format(),
+                        extent: image.extent(),
+                        usage: image.usage() | ImageUsage::TRANSFER_DST,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo::default()
+                ).unwrap()
+            ).unwrap();
+
+            let inter_buffer = ImageView::new_default(
+                Image::new(
+                    mamory_allocator.clone(),
+                    ImageCreateInfo {
+                        image_type: ImageType::Dim2d,
+                        format: image.format(),
+                        extent: image.extent(),
+                        usage: ImageUsage::COLOR_ATTACHMENT,
+                        samples: SampleCount::Sample1,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo::default(),
+                    )
+                .unwrap(),
+            ).unwrap();
+
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view, depth_buffer.clone()],
+                    attachments: vec![inter_buffer/*, view*/, depth_buffer.clone()],
                     ..Default::default()
                 },
             )
@@ -246,7 +284,7 @@ fn get_pipeline(
                 depth: Some(DepthState::simple()),
                 ..Default::default()
             }),
-            multisample_state: Some(MultisampleState::default()),
+            multisample_state: Some(MultisampleState::default()),// { rasterization_samples: SampleCount::Sample1, ..Default::default() }),
             color_blend_state: Some(ColorBlendState::with_attachment_states(
                 subpass.num_color_attachments(),
                 ColorBlendAttachmentState::default(),
@@ -258,7 +296,7 @@ fn get_pipeline(
     .unwrap()
 }
 
-static mut DBG: f32 = 3.0;
+static mut DBG: f32 = 0.0;
 
 fn get_command_buffers(
     command_buffer_allocator: &StandardCommandBufferAllocator,
@@ -297,7 +335,7 @@ fn get_command_buffers(
                 .unwrap()
                 .begin_render_pass(
                     RenderPassBeginInfo {
-                        clear_values: vec![Some([0.1, 0.1, 0.1, 1.0].into()), Some(1f32.into())],
+                        clear_values: vec![Some([0.1, 0.1, 0.1, 1.0].into()), /*Some([0.1, 0.1, 0.1, 1.0].into()), */Some(1f32.into())],
                         ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
                     },
                     SubpassBeginInfo {
@@ -447,15 +485,15 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         model_buffers.push(
             UpdatableBuffer::new(&device.clone(), BufferUsage::UNIFORM_BUFFER)
         );
-        model_buffers.last_mut().unwrap().write(ModelData {translation: Matrix4f::translation(Vec3f([0.0, 0.0, -1.0]))});
+        model_buffers.last_mut().unwrap().write(ModelData {translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -1.0]))});
     }
 
 
     let mut vp_data = VPData {
         view: Matrix4f::look_at(
-                  Vec3f([0.0, 0.0, 0.0]), 
-                  Vec3f([0.0, 0.0, 1.0]), 
-                  Vec3f([0.0, 1.0, 0.0])),
+                  Vec3f::new([0.0, 0.0, 0.0]), 
+                  Vec3f::new([0.0, 0.0, 1.0]), 
+                  Vec3f::new([0.0, 1.0, 0.0])),
         projection: Matrix4f::perspective((60.0_f32).to_radians(), 1.0, 0.1, 10.0)
     };
     let mut vp_buffer: UpdatableBuffer<VPData> = 
@@ -626,17 +664,15 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             }
 
             unsafe {
+                vp_data.view = Matrix4f::look_at(Vec3f::new([0.0, 0.0, 0.0]), Vec3f::new([(DBG/5.0).sin(), 0.0, (DBG/5.0).cos()]), Vec3f::new([0.0, 1.0, 0.0]));
                 model_buffers.get_mut(0).unwrap().write(
-                    ModelData { translation: Matrix4f::translation(Vec3f([DBG/5.0, 0.0, DBG])) }
+                    ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -5.0])) }
                 );
                 model_buffers.get_mut(1).unwrap().write(
-                    ModelData { translation: Matrix4f::translation(Vec3f([0.0, 0.0, DBG])) }
+                    ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, 5.0])) }
                 );
                 vp_buffer.write(vp_data);
-                DBG -= 0.01;
-                if DBG < 0.0 {
-                    DBG = 10.0
-                }
+                DBG += 0.01;
             }
 
             let future = previous_future

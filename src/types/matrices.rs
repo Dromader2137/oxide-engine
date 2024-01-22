@@ -14,11 +14,11 @@ impl Matrix4f {
                   [0.0, 0.0, 0.0, 1.0]])
     } 
     
-    pub fn translation(mut vec: Vec3f) -> Matrix4f {
+    pub fn translation(vec: Vec3f) -> Matrix4f {
         Matrix4f([[1.0, 0.0, 0.0, 0.0],
                   [0.0, 1.0, 0.0, 0.0],
                   [0.0, 0.0, 1.0, 0.0],
-                  [-*vec.x(), *vec.y(), *vec.z(), 1.0]])
+                  [-vec.x, vec.y, vec.z, 1.0]])
     }
 
     pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Matrix4f {
@@ -34,11 +34,11 @@ impl Matrix4f {
     pub fn look_at(mut eye: Vec3f, mut dir: Vec3f, mut up: Vec3f) -> Matrix4f {
         let mut f = dir.normalize();
         let mut s = f.cross(up.normalize()).normalize();
-        let mut u = s.cross(f);
+        let u = s.cross(f);
 
-        Matrix4f([[*s.x(), *s.y(), *s.z(), -eye.dot(s)],
-                  [*u.x(), *u.y(), *u.z(), -eye.dot(u)],
-                  [-*f.x(), -*f.y(), -*f.z(), eye.dot(f)],
+        Matrix4f([[s.x, s.y, s.z, -eye.dot(s)],
+                  [u.x, u.y, u.z, -eye.dot(u)],
+                  [-f.x, -f.y, -f.z, eye.dot(f)],
                   [0.0, 0.0, 0.0, 1.0]])
     }
 }
