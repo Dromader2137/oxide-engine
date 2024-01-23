@@ -42,6 +42,7 @@ use winit::window::WindowBuilder;
 pub mod types;
 use types::vectors::*;
 use types::matrices::*;
+pub mod rendering;
 
 #[derive(BufferContents, Vertex, Clone, Copy)]
 #[repr(C)]
@@ -145,26 +146,26 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
         attachments: {
             inter: {
                 format: swapchain.image_format(), // set the format the same as the swapchain
+                samples: 8,
+                load_op: Clear,
+                store_op: Store,
+            },
+            color: {
+                format: swapchain.image_format(), // set the format the same as the swapchain
                 samples: 1,
                 load_op: Clear,
                 store_op: Store,
             },
-            // color: {
-            //     format: swapchain.image_format(), // set the format the same as the swapchain
-            //     samples: 1,
-            //     load_op: Clear,
-            //     store_op: Store,
-            // },
             depth: {
                 format: Format::D32_SFLOAT,
-                samples: 1,
+                samples: 8,
                 load_op: Clear,
                 store_op: DontCare,
             }
         },
         pass: {
             color: [inter],
-            // color_resolve: [color],
+            color_resolve: [color],
             depth_stencil: {depth},
         },
     )
@@ -184,7 +185,7 @@ fn get_framebuffers(
                 format: Format::D32_SFLOAT,
                 extent: images[0].extent(),
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
-                samples: SampleCount::Sample1,
+                samples: SampleCount::Sample8,
                 ..Default::default()
             },
             AllocationCreateInfo::default(),
@@ -198,39 +199,28 @@ fn get_framebuffers(
         .iter()
         .map(|image| {
             let view = ImageView::new_default(
+                image.clone()
+            ).unwrap();
+
+            let inter = ImageView::new_default(
                 Image::new(
-                    mamory_allocator.clone(),
+                    mamory_allocator.clone(), 
                     ImageCreateInfo {
-                        image_type: image.image_type(),
+                        image_type: ImageType::Dim2d,
                         format: image.format(),
                         extent: image.extent(),
-                        usage: image.usage() | ImageUsage::TRANSFER_DST,
+                        usage: ImageUsage::COLOR_ATTACHMENT,
+                        samples: SampleCount::Sample8,
                         ..Default::default()
                     },
                     AllocationCreateInfo::default()
                 ).unwrap()
             ).unwrap();
 
-            let inter_buffer = ImageView::new_default(
-                Image::new(
-                    mamory_allocator.clone(),
-                    ImageCreateInfo {
-                        image_type: ImageType::Dim2d,
-                        format: image.format(),
-                        extent: image.extent(),
-                        usage: ImageUsage::COLOR_ATTACHMENT,
-                        samples: SampleCount::Sample1,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo::default(),
-                    )
-                .unwrap(),
-            ).unwrap();
-
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![inter_buffer/*, view*/, depth_buffer.clone()],
+                    attachments: vec![inter, view, depth_buffer.clone()],
                     ..Default::default()
                 },
             )
@@ -284,7 +274,7 @@ fn get_pipeline(
                 depth: Some(DepthState::simple()),
                 ..Default::default()
             }),
-            multisample_state: Some(MultisampleState::default()),// { rasterization_samples: SampleCount::Sample1, ..Default::default() }),
+            multisample_state: Some(MultisampleState { rasterization_samples: SampleCount::Sample8, ..Default::default() }),
             color_blend_state: Some(ColorBlendState::with_attachment_states(
                 subpass.num_color_attachments(),
                 ColorBlendAttachmentState::default(),
@@ -295,8 +285,6 @@ fn get_pipeline(
     )
     .unwrap()
 }
-
-static mut DBG: f32 = 0.0;
 
 fn get_command_buffers(
     command_buffer_allocator: &StandardCommandBufferAllocator,
@@ -335,7 +323,7 @@ fn get_command_buffers(
                 .unwrap()
                 .begin_render_pass(
                     RenderPassBeginInfo {
-                        clear_values: vec![Some([0.1, 0.1, 0.1, 1.0].into()), /*Some([0.1, 0.1, 0.1, 1.0].into()), */Some(1f32.into())],
+                        clear_values: vec![Some([0.1, 0.1, 0.1, 1.0].into()), Some([0.1, 0.1, 0.1, 1.0].into()), Some(1f32.into())],
                         ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
                     },
                     SubpassBeginInfo {
@@ -444,7 +432,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 min_image_count: caps.min_image_count,
                 image_format,
                 image_extent: dimensions.into(),
-                image_usage: ImageUsage::COLOR_ATTACHMENT,
+                image_usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
                 composite_alpha,
                 ..Default::default()
             },
@@ -562,6 +550,8 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     let mut fences: Vec<Option<Arc<FenceSignalFuture<_>>>> = vec![None; frames_in_flight];
     let mut previous_fence_i = 0;
 
+    let mut dbg: f32 = 0.0;
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -663,17 +653,15 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 };
             }
 
-            unsafe {
-                vp_data.view = Matrix4f::look_at(Vec3f::new([0.0, 0.0, 0.0]), Vec3f::new([(DBG/5.0).sin(), 0.0, (DBG/5.0).cos()]), Vec3f::new([0.0, 1.0, 0.0]));
-                model_buffers.get_mut(0).unwrap().write(
-                    ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -5.0])) }
+            vp_data.view = Matrix4f::look_at(Vec3f::new([0.0, 0.0, 0.0]), Vec3f::new([(dbg/5.0).sin(), 0.0, (dbg/5.0).cos()]), Vec3f::new([0.0, 1.0, 0.0]));
+            model_buffers.get_mut(0).unwrap().write(
+                ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -5.0])) }
                 );
-                model_buffers.get_mut(1).unwrap().write(
-                    ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, 5.0])) }
+            model_buffers.get_mut(1).unwrap().write(
+                ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, 5.0])) }
                 );
-                vp_buffer.write(vp_data);
-                DBG += 0.01;
-            }
+            vp_buffer.write(vp_data);
+            dbg += 0.01;
 
             let future = previous_future
                 .join(acquire_future)
