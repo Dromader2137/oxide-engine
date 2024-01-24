@@ -4,6 +4,7 @@ use std::io::Read;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
+use rendering::{SimpleRenderer, Window, EventLoop, ShaderManager, MeshManager, Mesh, ShaderData, ModelData, VPData, ShaderType, Shader};
 use types::buffers::UpdatableBuffer;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
@@ -31,64 +32,17 @@ use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpa
 use vulkano::shader::spirv::{bytes_to_words, ImageFormat};
 use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use vulkano::swapchain::{self, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
-use vulkano::sync::future::FenceSignalFuture;
+use vulkano::sync::future::{FenceSignalFuture, NowFuture};
 use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError};
 
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
+use winit::event_loop::{ControlFlow};
 
 pub mod types;
 use types::vectors::*;
 use types::matrices::*;
 pub mod rendering;
-
-#[derive(BufferContents, Vertex, Clone, Copy)]
-#[repr(C)]
-pub struct VertexData {
-    #[format(R32G32B32_SFLOAT)]
-    pub position: Vec3f,
-    #[format(R32G32_SFLOAT)]
-    pub uv: Vec2f,
-    #[format(R32G32B32_SFLOAT)]
-    pub normal: Vec3f,
-}
-
-#[repr(C)]
-pub struct Mesh {
-    pub mesh: Vec<VertexData>,
-    pub vertex: String,
-    pub fragment: String,
-    pub buffer: Option<Subbuffer<[VertexData]>>,
-}
-
-#[derive(Pod, Zeroable, Clone, Copy)]
-#[repr(C)]
-pub struct VPData {
-    pub view: Matrix4f,
-    pub projection: Matrix4f,
-}
-
-#[derive(Pod, Zeroable, Clone, Copy)]
-#[repr(C)]
-pub struct ModelData {
-    pub translation: Matrix4f
-}
-
-pub struct Shader {
-    pub shader: Arc<ShaderModule>,
-}
-
-pub enum ShaderType {
-    Fragment,
-    Vertex,
-}
-
-pub struct ShaderData {
-    pub shader_code: Vec<u32>,
-    pub shader_type: ShaderType,
-}
 
 pub fn read_file_to_words(path: &str) -> Vec<u32> {
     let mut file = File::open(path).unwrap();
@@ -373,83 +327,17 @@ fn get_command_buffers(
 }
 
 pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
-    let library = vulkano::VulkanLibrary::new().expect("no local Vulkan library/DLL");
-    let event_loop = EventLoop::new();
+    let event_loop_ = EventLoop::new();
+    let window_ = Window::new(&event_loop_); 
+    let renderer: SimpleRenderer<_> = SimpleRenderer::<NowFuture>::new();
+    renderer.init(&event_loop_, &window_);
+    let shader_manager = ShaderManager::new();
+    let mesh_manager = MeshManager::new();
 
-    let required_extensions = Surface::required_extensions(&event_loop);
-    let instance = Instance::new(
-        library,
-        InstanceCreateInfo {
-            enabled_extensions: required_extensions,
-            ..Default::default()
-        },
-    )
-    .expect("failed to create instance");
-
-    let window = Arc::new(WindowBuilder::new().build(&event_loop).unwrap());
-
-    let surface = Surface::from_window(instance.clone(), window.clone()).unwrap();
-
-    let device_extensions = DeviceExtensions {
-        khr_swapchain: true,
-        ..DeviceExtensions::empty()
-    };
-
-    let (physical_device, queue_family_index) =
-        select_physical_device(&instance, &surface, &device_extensions);
-
-    let (device, mut queues) = Device::new(
-        physical_device.clone(),
-        DeviceCreateInfo {
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index,
-                ..Default::default()
-            }],
-            enabled_extensions: device_extensions, // new
-            ..Default::default()
-        },
-    )
-    .expect("failed to create device");
-
-    let queue = queues.next().unwrap();
-
-    let (mut swapchain, images) = {
-        let caps = physical_device
-            .surface_capabilities(&surface, Default::default())
-            .expect("failed to get surface capabilities");
-
-        let dimensions = window.inner_size();
-        let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
-        let image_format = physical_device
-            .surface_formats(&surface, Default::default())
-            .unwrap()[0]
-            .0;
-
-        Swapchain::new(
-            device.clone(),
-            surface,
-            SwapchainCreateInfo {
-                min_image_count: caps.min_image_count,
-                image_format,
-                image_extent: dimensions.into(),
-                image_usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
-                composite_alpha,
-                ..Default::default()
-            },
-        )
-        .unwrap()
-    };
-
-    let standard_memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-    let render_pass = get_render_pass(device.clone(), swapchain.clone());
-    let framebuffers = get_framebuffers(
-        &images,
-        render_pass.clone(),
-        standard_memory_allocator.clone(),
-    );
+    let standard_memory_allocator = Arc::new(StandardMemoryAllocator::new_default(renderer.device.clone().unwrap().clone()));
 
     for mesh in meshes.iter_mut() {
-        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(renderer.device.clone().unwrap().clone()));
         mesh.buffer = Some(
             Buffer::from_iter(
                 memory_allocator,
@@ -463,19 +351,19 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                     ..Default::default()
                 },
                 mesh.mesh.clone(),
-            )
+           )
             .unwrap(),
         );
+        mesh_manager.list.push(*mesh);
     }
 
     let mut model_buffers: Vec<UpdatableBuffer<ModelData>> = Vec::new();
     for _ in (0..2).step_by(1) {
         model_buffers.push(
-            UpdatableBuffer::new(&device.clone(), BufferUsage::UNIFORM_BUFFER)
+            UpdatableBuffer::new(&renderer.device.clone().unwrap().clone(), BufferUsage::UNIFORM_BUFFER)
         );
-        model_buffers.last_mut().unwrap().write(ModelData {translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -1.0]))});
+        model_buffers.last_mut().unwrap().write(ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -1.0]))});
     }
-
 
     let mut vp_data = VPData {
         view: Matrix4f::look_at(
@@ -485,7 +373,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         projection: Matrix4f::perspective((60.0_f32).to_radians(), 1.0, 0.1, 10.0)
     };
     let mut vp_buffer: UpdatableBuffer<VPData> = 
-        UpdatableBuffer::new(&device.clone(), BufferUsage::UNIFORM_BUFFER);
+        UpdatableBuffer::new(&renderer.device.clone().unwrap().clone(), BufferUsage::UNIFORM_BUFFER);
     vp_buffer.write(vp_data);
 
     let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
@@ -498,61 +386,33 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
         .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Fragment))
         .collect();
 
-    let mut loaded_shaders: HashMap<String, Arc<ShaderModule>> = HashMap::new();
-
     for (shader, _) in shaders.iter() {
-        loaded_shaders.insert(
+        shader_manager.library.insert(
             shader.to_string(),
-            load_shader_module(&shaders, &device, shader),
+            Shader { shader: load_shader_module(&shaders, &renderer.device.clone().unwrap(), shader) },
         );
     }
 
-    let mut viewport = Viewport {
-        offset: [0.0, 0.0],
-        extent: window.inner_size().into(),
-        depth_range: 0.0..=1.0,
-    };
-
-    let mut pipelines: HashMap<(String, String), Arc<GraphicsPipeline>> = HashMap::new();
     for (name_vert, _) in vertex_shaders.iter() {
         for (name_frag, _) in fragment_shaders.iter() {
-            pipelines.insert(
+            shader_manager.pipelines.insert(
                 (name_vert.to_string(), name_frag.to_string()),
-                get_pipeline(
-                    device.clone(),
-                    loaded_shaders.get(*name_vert).unwrap().clone(),
-                    loaded_shaders.get(*name_frag).unwrap().clone(),
-                    render_pass.clone(),
-                    viewport.clone(),
+                renderer.get_pipeline(
+                    shader_manager.library.get(*name_vert).unwrap().clone(),
+                    shader_manager.library.get(*name_frag).unwrap().clone(),
                 ),
             );
         }
     }
 
-    let descriptor_set_allocator = StandardDescriptorSetAllocator::new(device.clone(), Default::default());
-    let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
+    let descriptor_set_allocator = StandardDescriptorSetAllocator::new(renderer.device.clone().unwrap().clone(), Default::default());
+    let command_buffer_allocator = StandardCommandBufferAllocator::new(renderer.device.clone().unwrap().clone(), Default::default());
 
-    let mut command_buffers = get_command_buffers(
-        &command_buffer_allocator,
-        &descriptor_set_allocator,
-        &queue,
-        &pipelines,
-        &framebuffers,
-        &meshes,
-        &vp_buffer,
-        &model_buffers,
-    );
-
-    let mut window_resized = false;
-    let mut recreate_swapchain = false;
-
-    let frames_in_flight = images.len();
-    let mut fences: Vec<Option<Arc<FenceSignalFuture<_>>>> = vec![None; frames_in_flight];
-    let mut previous_fence_i = 0;
+    renderer.update_command_buffers(&mesh_manager, &shader_manager, &model_buffers, &vp_buffer);
 
     let mut dbg: f32 = 0.0;
 
-    event_loop.run(move |event, _, control_flow| match event {
+    event_loop_.event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
             ..
@@ -563,13 +423,13 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             event: WindowEvent::Resized(_),
             ..
         } => {
-            window_resized = true;
+            renderer.window_resized = true;
         }
         Event::MainEventsCleared => {
-            if window_resized || recreate_swapchain {
-                recreate_swapchain = false;
+            if renderer.window_resized || renderer.recreate_swapchain {
+                renderer.recreate_swapchain = false;
 
-                let new_dimensions = window.inner_size();
+                let new_dimensions = window_.window_handle.inner_size();
 
                 let (new_swapchain, new_images) = swapchain
                     .recreate(SwapchainCreateInfo {
