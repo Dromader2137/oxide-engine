@@ -2,14 +2,12 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
+use std::time::Instant;
 
-use rendering::{SimpleRenderer, Window, EventLoop, ShaderManager, MeshManager, Mesh, ShaderData, ModelData, VPData, ShaderType, Shader};
+use rendering::{Renderer, Window, EventLoop, ShaderManager, MeshManager, Mesh, ShaderData, ModelData, VPData};
 use types::buffers::UpdatableBuffer;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::device::Device;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::buffer::BufferUsage;
 use vulkano::shader::spirv::bytes_to_words;
-use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use vulkano::swapchain::{self, SwapchainPresentInfo};
 use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError};
@@ -29,102 +27,41 @@ pub fn read_file_to_words(path: &str) -> Vec<u32> {
     bytes_to_words(buffer.as_slice()).unwrap().to_vec()
 }
 
-fn load_shader_module(
-    shaders: &HashMap<String, ShaderData>,
-    device: &Arc<Device>,
-    name: &str,
-) -> Arc<ShaderModule> {
-    unsafe {
-        ShaderModule::new(
-            device.clone(),
-            ShaderModuleCreateInfo::new(shaders.get(name).unwrap().shader_code.as_slice()),
-        )
-        .unwrap()
-    }
-}
 
-pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
-    let event_loop_ = EventLoop::new();
-    let window_ = Window::new(&event_loop_); 
-    let mut renderer: SimpleRenderer = SimpleRenderer::new();
-    renderer.init(&event_loop_, &window_);
+pub fn run(meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
+    let event_loop = EventLoop::new();
+    let window = Window::new(&event_loop); 
+    let mut renderer: Renderer = Renderer::new();
     let mut shader_manager = ShaderManager::new();
     let mut mesh_manager = MeshManager::new();
-
-    for mesh in meshes.iter_mut() {
-        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(renderer.device.clone().unwrap().clone()));
-        mesh.buffer = Some(
-            Buffer::from_iter(
-                memory_allocator,
-                BufferCreateInfo {
-                    usage: BufferUsage::VERTEX_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                mesh.mesh.clone(),
-           )
-            .unwrap(),
-        );
-    }
-    mesh_manager.list = meshes;
+    
+    renderer.init(&event_loop, &window);
 
     let mut model_buffers: Vec<UpdatableBuffer<ModelData>> = Vec::new();
     for _ in (0..2).step_by(1) {
-        model_buffers.push(
-            UpdatableBuffer::new(&renderer.device.clone().unwrap().clone(), BufferUsage::UNIFORM_BUFFER)
-        );
-        model_buffers.last_mut().unwrap().write(ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -1.0]))});
+        model_buffers.push(UpdatableBuffer::new(&renderer.device.clone().unwrap().clone(), BufferUsage::UNIFORM_BUFFER));
     }
-
+    let mut vp_buffer: UpdatableBuffer<VPData> = UpdatableBuffer::new(&renderer.device.clone().unwrap().clone(), BufferUsage::UNIFORM_BUFFER);
+    
+    let mut model_data = vec![ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -1.0]))}; 2];
     let mut vp_data = VPData {
-        view: Matrix4f::look_at(
-                  Vec3f::new([0.0, 0.0, 0.0]), 
-                  Vec3f::new([0.0, 0.0, 1.0]), 
-                  Vec3f::new([0.0, 1.0, 0.0])),
-        projection: Matrix4f::perspective((60.0_f32).to_radians(), 1.0, 0.1, 10.0)
+        view: Matrix4f::look_at(Vec3f::new([0.0, 0.0, 0.0]), Vec3f::new([0.0, 0.0, 1.0]), Vec3f::new([0.0, 1.0, 0.0])),
+        projection: Matrix4f::perspective((75.0_f32).to_radians(), 1.0, 0.1, 10.0)
     };
-    let mut vp_buffer: UpdatableBuffer<VPData> = 
-        UpdatableBuffer::new(&renderer.device.clone().unwrap().clone(), BufferUsage::UNIFORM_BUFFER);
+    
+    for i in (0..2).step_by(1) {
+        model_buffers.last_mut().unwrap().write(model_data[i as usize]);
+    }
     vp_buffer.write(vp_data);
 
-    let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
-        .iter()
-        .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Vertex))
-        .collect();
-
-    let fragment_shaders: Vec<(&String, &ShaderData)> = shaders
-        .iter()
-        .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Fragment))
-        .collect();
-
-    for (shader, _) in shaders.iter() {
-        shader_manager.library.insert(
-            shader.to_string(),
-            Shader { shader: load_shader_module(&shaders, &renderer.device.clone().unwrap(), shader) },
-        );
-    }
-
-    for (name_vert, _) in vertex_shaders.iter() {
-        for (name_frag, _) in fragment_shaders.iter() {
-            shader_manager.pipelines.insert(
-                (name_vert.to_string(), name_frag.to_string()),
-                renderer.get_pipeline(
-                    shader_manager.library.get(*name_vert).unwrap(),
-                    shader_manager.library.get(*name_frag).unwrap(),
-                ),
-            );
-        }
-    }
-
+    shader_manager.load(&mut renderer, shaders);
+    mesh_manager.load(&mut renderer, meshes);
     renderer.update_command_buffers(&mesh_manager, &shader_manager, &model_buffers, &vp_buffer);
 
-    let mut dbg: f32 = 0.0;
+    let mut now = Instant::now();
+    let mut dbg = 0.0;
 
-    event_loop_.event_loop.run(move |event, _, control_flow| match event {
+    event_loop.event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
             ..
@@ -138,7 +75,7 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
             renderer.window_resized = true;
         }
         Event::MainEventsCleared => {
-            renderer.handle_possible_resize(&window_, &mut vp_data, &vp_buffer, &model_buffers, &mesh_manager, &mut shader_manager);
+            renderer.handle_possible_resize(&window, &mut vp_data, &vp_buffer, &model_buffers, &mesh_manager, &mut shader_manager);
 
             let (image_i, suboptimal, acquire_future) =
                 match swapchain::acquire_next_image(renderer.swapchain.as_ref().unwrap().clone(), None)
@@ -177,15 +114,16 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
                 };
             }
 
-            vp_data.view = Matrix4f::look_at(Vec3f::new([0.0, 0.0, 0.0]), Vec3f::new([(dbg/5.0).sin(), 0.0, (dbg/5.0).cos()]), Vec3f::new([0.0, 1.0, 0.0]));
-            model_buffers.get_mut(0).unwrap().write(
-                ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, -5.0])) }
-                );
-            model_buffers.get_mut(1).unwrap().write(
-                ModelData { translation: Matrix4f::translation(Vec3f::new([0.0, 0.0, 5.0])) }
-                );
+            dbg += now.elapsed().as_secs_f32();
+            now = Instant::now();
+
+            vp_data.view = Matrix4f::look_at(Vec3f::new([0.0, 0.0, 0.0]), Vec3f::new([dbg.sin(), 0.0, dbg.cos()]), Vec3f::new([0.0, 1.0, 0.0]));
+            model_data[0].translation = Matrix4f::translation(Vec3f::new([0.0, 0.0, -2.0]));
+            model_data[1].translation = Matrix4f::translation(Vec3f::new([0.0, 0.0, 2.0]));
             vp_buffer.write(vp_data);
-            dbg += 0.01;
+            for (i, model_buffer) in model_buffers.iter_mut().enumerate() {
+                model_buffer.write(model_data[i]);
+            }
 
             let future = previous_future
                 .join(acquire_future)

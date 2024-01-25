@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use vulkano::buffer::{Subbuffer, BufferContents};
+use vulkano::buffer::{Subbuffer, BufferContents, Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, CopyBufferInfo, CommandBufferExecFuture};
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
@@ -13,7 +13,7 @@ use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::{AllocationCreateInfo, StandardMemoryAllocator};
+use vulkano::memory::allocator::{AllocationCreateInfo, StandardMemoryAllocator, MemoryTypeFilter};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
 use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
@@ -25,7 +25,7 @@ use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
-use vulkano::shader::ShaderModule;
+use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use vulkano::swapchain::{Surface, Swapchain, SwapchainCreateInfo, SwapchainAcquireFuture, PresentFuture};
 use vulkano::sync::future::{FenceSignalFuture, JoinFuture};
 use vulkano::sync::GpuFuture;
@@ -64,6 +64,21 @@ pub struct Shader {
     pub shader: Arc<ShaderModule>,
 }
 
+fn load_shader_module(
+    shaders: &HashMap<String, ShaderData>,
+    device: &Arc<Device>,
+    name: &str,
+) -> Shader {
+    unsafe {
+        Shader {
+        shader: ShaderModule::new(
+                device.clone(),
+                ShaderModuleCreateInfo::new(shaders.get(name).unwrap().shader_code.as_slice()),
+            ).unwrap()
+        }
+    }
+}
+
 pub enum ShaderType {
     Fragment,
     Vertex,
@@ -83,6 +98,37 @@ impl ShaderManager {
     pub fn new() -> ShaderManager {
         ShaderManager { library: HashMap::new(), pipelines: HashMap::new() }
     }
+
+    pub fn load(&mut self, renderer: &mut Renderer, shaders: HashMap<String, ShaderData>) {
+        let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
+            .iter()
+            .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Vertex))
+            .collect();
+
+        let fragment_shaders: Vec<(&String, &ShaderData)> = shaders
+            .iter()
+            .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Fragment))
+            .collect();
+
+        for (shader, _) in shaders.iter() {
+            self.library.insert(
+                shader.to_string(),
+                load_shader_module(&shaders, &renderer.device.clone().unwrap(), shader),
+            );
+        }
+
+        for (name_vert, _) in vertex_shaders.iter() {
+            for (name_frag, _) in fragment_shaders.iter() {
+                self.pipelines.insert(
+                    (name_vert.to_string(), name_frag.to_string()),
+                    renderer.get_pipeline(
+                        self.library.get(*name_vert).unwrap(),
+                        self.library.get(*name_frag).unwrap(),
+                    ),
+                );
+            }
+        }
+    }
 }
 
 pub struct Mesh {
@@ -99,6 +145,28 @@ pub struct MeshManager {
 impl MeshManager {
     pub fn new() -> MeshManager {
         MeshManager { list: Vec::new() }
+    }
+
+    pub fn load(&mut self, renderer: &mut Renderer, mut meshes: Vec<Mesh>) {
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(renderer.device.clone().unwrap().clone()));
+        for mesh in meshes.iter_mut() {
+            mesh.buffer = Some(
+                Buffer::from_iter(
+                    memory_allocator.clone(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::VERTEX_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                        ..Default::default()
+                    },
+                    mesh.mesh.clone(),
+                ).unwrap(),
+            );
+        }
+        self.list = meshes;
     }
 }
 
@@ -122,7 +190,7 @@ impl EventLoop {
     }
 }
 
-pub struct SimpleRenderer {
+pub struct Renderer {
     library: Option<Arc<VulkanLibrary>>,
     instance: Option<Arc<Instance>>,
     surface: Option<Arc<Surface>>,
@@ -143,7 +211,7 @@ pub struct SimpleRenderer {
     pub previous_fence: usize,
 }
 
-impl SimpleRenderer
+impl Renderer
 {
     fn select_physical_device(&mut self, device_extensions: &DeviceExtensions) {
         let (physical_device, queue_family_index) = self.instance.as_ref().unwrap()
@@ -403,7 +471,6 @@ impl SimpleRenderer
         meshes: &MeshManager, 
         shaders: &mut ShaderManager
     ) {
-        // let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(self.device.as_ref().unwrap().clone()));
         if self.window_resized || self.recreate_swapchain {
             self.recreate_swapchain = false;
             self.window_resized = false;
@@ -434,8 +501,8 @@ impl SimpleRenderer
         }
     }
 
-    pub fn new() -> SimpleRenderer {
-        SimpleRenderer { 
+    pub fn new() -> Renderer {
+        Renderer { 
             library: None, 
             instance: None, 
             surface: None,
