@@ -5,6 +5,7 @@ use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, 
 use vulkano::device::Device;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 
+#[derive(Clone, Debug)]
 pub struct UpdatableBuffer<DataType> {
     pub main_buffer: Subbuffer<DataType>,
     pub staging_buffer: Subbuffer<DataType>
