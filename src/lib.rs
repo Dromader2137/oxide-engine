@@ -48,13 +48,11 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     world.add_component::<Transform>(entity1, Transform::new(Vec3f::new([-1.0, 0.0, 2.0]), &renderer));
     for mesh in world.borrow_component_vec_mut::<Mesh>().unwrap().iter_mut() {
         mesh.as_mut().unwrap().load(&mut renderer);
-        println!("X");
     }
     for transform in world.borrow_component_vec_mut::<Transform>().unwrap().iter_mut() {
         let position = transform.as_ref().unwrap().position;
         transform.as_mut().unwrap().buffer.as_mut().unwrap().write(Matrix4f::translation(position));
     }
-    println!("{}", world.components.len());
     renderer.update_command_buffers(&mut world, &shader_manager, &vp_buffer);
 
     event_loop.event_loop.run(move |event, _, control_flow| match event {
