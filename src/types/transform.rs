@@ -11,10 +11,14 @@ pub struct Transform {
 }
 
 impl Transform {
-    pub fn new(pos: Vec3f, renderer: &Renderer) -> Transform {
+    pub fn new(pos: Vec3f) -> Transform {
         Transform { 
             position: pos,
-            buffer: Some(UpdatableBuffer::new(renderer.device.as_ref().unwrap(), BufferUsage::UNIFORM_BUFFER))
+            buffer: None
         }
+    }
+
+    pub fn load(&mut self, renderer: &Renderer) {
+        self.buffer = Some(UpdatableBuffer::new(renderer.device.as_ref().unwrap(), BufferUsage::UNIFORM_BUFFER));
     }
 }

@@ -18,15 +18,11 @@ use winit::event_loop::ControlFlow;
 use types::vectors::*;
 use types::matrices::*;
 
-pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
+pub fn run(mut world: World, shaders: HashMap<String, ShaderData>) {
     let event_loop = EventLoop::new();
     let window = Window::new(&event_loop); 
     let mut renderer: Renderer = Renderer::new();
     let mut shader_manager = ShaderManager::new();
-    let mut world = World::new();
-
-    let entity0 = world.new_entity();
-    let entity1 = world.new_entity();
 
     renderer.init(&event_loop, &window);
 
@@ -42,14 +38,11 @@ pub fn run(mut meshes: Vec<Mesh>, shaders: HashMap<String, ShaderData>) {
     let mut now = Instant::now();
     let mut dbg = 0.0;
 
-    world.add_component::<Mesh>(entity0, meshes.get(0).unwrap().clone());
-    world.add_component::<Mesh>(entity1, meshes.get(1).unwrap().clone());
-    world.add_component::<Transform>(entity0, Transform::new(Vec3f::new([1.0, 0.0, 2.0]), &renderer));
-    world.add_component::<Transform>(entity1, Transform::new(Vec3f::new([-1.0, 0.0, 2.0]), &renderer));
     for mesh in world.borrow_component_vec_mut::<Mesh>().unwrap().iter_mut() {
         mesh.as_mut().unwrap().load(&mut renderer);
     }
     for transform in world.borrow_component_vec_mut::<Transform>().unwrap().iter_mut() {
+        transform.as_mut().unwrap().load(&renderer);
         let position = transform.as_ref().unwrap().position;
         transform.as_mut().unwrap().buffer.as_mut().unwrap().write(Matrix4f::translation(position));
     }
