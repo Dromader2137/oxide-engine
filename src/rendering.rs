@@ -92,11 +92,13 @@ fn load_shader_module(
     }
 }
 
+#[derive(Debug)]
 pub enum ShaderType {
     Fragment,
     Vertex,
 }
 
+#[derive(Debug)]
 pub struct ShaderData {
     pub shader_code: Vec<u32>,
     pub shader_type: ShaderType,

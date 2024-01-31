@@ -4,12 +4,14 @@ pub mod ecs;
 pub mod utility;
 
 use std::collections::HashMap;
+use std::fs;
 use std::time::Instant;
 
 use ecs::World;
-use rendering::{Renderer, Window, EventLoop, ShaderManager, Mesh, ShaderData, ModelData, VPData};
+use rendering::{Renderer, Window, EventLoop, ShaderManager, Mesh, ShaderData, ModelData, VPData, ShaderType};
 use types::buffers::UpdatableBuffer;
 use types::transform::Transform;
+use utility::read_file_to_words;
 use vulkano::buffer::BufferUsage;
 
 use winit::event::{Event, WindowEvent};
@@ -18,7 +20,7 @@ use winit::event_loop::ControlFlow;
 use types::vectors::*;
 use types::matrices::*;
 
-pub fn run(mut world: World, shaders: HashMap<String, ShaderData>) {
+pub fn run(mut world: World) {
     let event_loop = EventLoop::new();
     let window = Window::new(&event_loop); 
     let mut renderer: Renderer = Renderer::new();
@@ -32,7 +34,20 @@ pub fn run(mut world: World, shaders: HashMap<String, ShaderData>) {
         projection: Matrix4f::perspective((75.0_f32).to_radians(), 1.0, 0.1, 10.0)
     };
     vp_buffer.write(vp_data);
-
+    
+    let mut shaders: HashMap<String, ShaderData> = HashMap::new();
+    for file in fs::read_dir("./shaders/bin/").unwrap() {
+        let path = file.unwrap().path().to_str().unwrap().to_string();
+        let processed_path = path.split_once("/").unwrap().1.split_once("/").unwrap().1.split_once("/").unwrap().1.split_once(".").unwrap().0.trim();
+        if processed_path == "" { continue; }
+        let shader_type = if processed_path != "simple" { ShaderType::Fragment } else { ShaderType::Vertex };
+        shaders.insert(
+            processed_path.to_string(),
+            ShaderData {
+                shader_code: read_file_to_words(path.split_once("/").unwrap().1), 
+                shader_type
+        });
+    }
     shader_manager.load(&mut renderer, shaders);
 
     let mut now = Instant::now();
