@@ -5,10 +5,11 @@ pub mod utility;
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
 use std::time::Instant;
 
 use ecs::World;
-use rendering::{Renderer, Window, EventLoop, ShaderManager, Mesh, ShaderData, ModelData, VPData, ShaderType};
+use rendering::{Renderer, Window, EventLoop, ShaderManager, Mesh, ShaderData, VPData, ShaderType};
 use types::buffers::UpdatableBuffer;
 use types::transform::Transform;
 use utility::read_file_to_words;
@@ -36,15 +37,17 @@ pub fn run(mut world: World) {
     vp_buffer.write(vp_data);
     
     let mut shaders: HashMap<String, ShaderData> = HashMap::new();
-    for file in fs::read_dir("./shaders/bin/").unwrap() {
-        let path = file.unwrap().path().to_str().unwrap().to_string();
-        let processed_path = path.split_once("/").unwrap().1.split_once("/").unwrap().1.split_once("/").unwrap().1.split_once(".").unwrap().0.trim();
-        if processed_path == "" { continue; }
-        let shader_type = if processed_path != "simple" { ShaderType::Fragment } else { ShaderType::Vertex };
+    let mut shaders_file = fs::File::open("./shaders/bin/.shaders").unwrap();
+    let mut shaders_db = String::new();
+    shaders_file.read_to_string(&mut shaders_db).unwrap();
+    for shader in shaders_db.lines() {
+        let (name, shader_type) = shader.split_once(" ").unwrap();
+        let shader_type = if shader_type == "frag" { ShaderType::Fragment } else { ShaderType::Vertex };
+        let mut shader_path = "./shaders/bin/".to_owned(); shader_path.push_str(name); shader_path.push_str(".spv");
         shaders.insert(
-            processed_path.to_string(),
+            name.to_string(),
             ShaderData {
-                shader_code: read_file_to_words(path.split_once("/").unwrap().1), 
+                shader_code: read_file_to_words(&shader_path), 
                 shader_type
         });
     }
