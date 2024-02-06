@@ -453,35 +453,35 @@ impl Renderer {
                     )
                     .unwrap();
 
-                    for transform in transforms.iter() {
-                        builder
-                            .copy_buffer(CopyBufferInfo::buffers(
-                                transform
-                                    .as_ref()
-                                    .unwrap()
-                                    .buffer
-                                    .as_ref()
-                                    .unwrap()
-                                    .staging_buffer
-                                    .clone(),
-                                transform
-                                    .as_ref()
-                                    .unwrap()
-                                    .buffer
-                                    .as_ref()
-                                    .unwrap()
-                                    .main_buffer
-                                    .clone(),
-                            ))
-                            .unwrap();
-                    }
+                    // for transform in transforms.iter() {
+                    //     builder
+                    //         .copy_buffer(CopyBufferInfo::buffers(
+                    //             transform
+                    //                 .as_ref()
+                    //                 .unwrap()
+                    //                 .buffer
+                    //                 .as_ref()
+                    //                 .unwrap()
+                    //                 .staging_buffer
+                    //                 .clone(),
+                    //             transform
+                    //                 .as_ref()
+                    //                 .unwrap()
+                    //                 .buffer
+                    //                 .as_ref()
+                    //                 .unwrap()
+                    //                 .main_buffer
+                    //                 .clone(),
+                    //         ))
+                    //         .unwrap();
+                    // }
 
                     builder
-                        .copy_buffer(CopyBufferInfo::buffers(
-                            vp_buffer.staging_buffer.clone(),
-                            vp_buffer.main_buffer.clone(),
-                        ))
-                        .unwrap()
+                        // .copy_buffer(CopyBufferInfo::buffers(
+                        //     vp_buffer.staging_buffer.clone(),
+                        //     vp_buffer.main_buffer.clone(),
+                        // ))
+                        // .unwrap()
                         .begin_render_pass(
                             RenderPassBeginInfo {
                                 clear_values: vec![
@@ -514,7 +514,7 @@ impl Renderer {
                         let vp_set = PersistentDescriptorSet::new(
                             &descriptor_set_allocator,
                             pipeline.layout().set_layouts().get(0).unwrap().clone(),
-                            [WriteDescriptorSet::buffer(0, vp_buffer.main_buffer.clone())],
+                            [WriteDescriptorSet::buffer(0, vp_buffer.staging_buffer.clone())],
                             [],
                         )
                         .unwrap();
@@ -524,7 +524,7 @@ impl Renderer {
                             pipeline.layout().set_layouts().get(1).unwrap().clone(),
                             [WriteDescriptorSet::buffer(
                                 0,
-                                transform.buffer.as_ref().unwrap().main_buffer.clone(),
+                                transform.buffer.as_ref().unwrap().staging_buffer.clone(),
                             )],
                             [],
                         )

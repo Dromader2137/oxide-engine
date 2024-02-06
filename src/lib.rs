@@ -62,7 +62,7 @@ pub fn run(mut world: World) {
     for transform in world.borrow_component_vec_mut::<Transform>().unwrap().iter_mut() {
         transform.as_mut().unwrap().load(&renderer);
         let position = transform.as_ref().unwrap().position;
-        transform.as_mut().unwrap().buffer.as_mut().unwrap().write(Matrix4f::translation(position));
+        transform.as_mut().unwrap().buffer.as_mut().unwrap().write(Matrix4f::translation(position.to_vec3f()));
     }
     renderer.update_command_buffers(&mut world, &shader_manager, &vp_buffer);
 

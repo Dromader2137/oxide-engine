@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bytemuck::Pod;
-use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
+use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter, GenericMemoryAllocatorCreateInfo};
 use vulkano::device::Device;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, BufferContents};
 
@@ -16,13 +16,20 @@ where
     DataType: Pod + BufferContents
 {
      pub fn new(device: &Arc<Device>, buffer_usage: BufferUsage) -> UpdatableBuffer<DataType> {
-        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new(
+            device.clone(),
+            GenericMemoryAllocatorCreateInfo {
+                block_sizes: &[256, 256, 256, 256, 256],
+                ..Default::default()
+            },
+        ));
 
         UpdatableBuffer {
             main_buffer: Buffer::new_sized(
                 memory_allocator.clone(),
                 BufferCreateInfo {
                     usage: buffer_usage | BufferUsage::TRANSFER_DST,
+                    // size: std::mem::size_of::<DataType>() as u64,
                     ..Default::default()
                 },
                 AllocationCreateInfo {
@@ -35,6 +42,7 @@ where
                 memory_allocator.clone(),
                 BufferCreateInfo {
                     usage: buffer_usage | BufferUsage::TRANSFER_SRC,
+                    // size: std::mem::size_of::<DataType>() as u64,
                     ..Default::default()
                 },
                 AllocationCreateInfo {

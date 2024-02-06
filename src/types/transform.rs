@@ -6,12 +6,12 @@ use super::{buffers::UpdatableBuffer, matrices::Matrix4f};
 
 #[derive(Clone, Debug)]
 pub struct Transform {
-    pub position: Vec3f,
+    pub position: Vec3d,
     pub buffer: Option<UpdatableBuffer<Matrix4f>>
 }
 
 impl Transform {
-    pub fn new(pos: Vec3f) -> Transform {
+    pub fn new(pos: Vec3d) -> Transform {
         Transform { 
             position: pos,
             buffer: None
