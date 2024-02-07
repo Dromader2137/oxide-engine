@@ -1,8 +1,9 @@
-use std::{any::Any, cell::{RefMut, RefCell}};
+use std::{
+    any::Any,
+    cell::{RefCell, RefMut},
+};
 
-pub trait Component {
-
-}
+pub trait Component {}
 
 pub trait ComponentVec {
     fn as_any(&self) -> &dyn Any;
@@ -17,7 +18,10 @@ pub struct World {
 
 impl World {
     pub fn new() -> World {
-        World { entity_count: 0, components: Vec::new() }
+        World {
+            entity_count: 0,
+            components: Vec::new(),
+        }
     }
 
     pub fn new_entity(&mut self) -> usize {
@@ -40,8 +44,7 @@ impl World {
             }
         }
 
-        let mut new_component_vec: Vec<Option<Component>> =
-            Vec::with_capacity(self.entity_count);
+        let mut new_component_vec: Vec<Option<Component>> = Vec::with_capacity(self.entity_count);
 
         for _ in 0..self.entity_count {
             new_component_vec.push(None);
@@ -52,7 +55,9 @@ impl World {
             .push(Box::new(RefCell::new(new_component_vec)));
     }
 
-    pub fn borrow_component_vec_mut<ComponentType: 'static + Clone>(&self) -> Option<RefMut<Vec<Option<ComponentType>>>> {
+    pub fn borrow_component_vec_mut<ComponentType: 'static + Clone>(
+        &self,
+    ) -> Option<RefMut<Vec<Option<ComponentType>>>> {
         for component_vec in self.components.iter() {
             if let Some(component) = component_vec
                 .as_any()

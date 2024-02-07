@@ -5,7 +5,7 @@ use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, CopyBufferInfo,
+    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage,
     PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
 };
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
@@ -159,12 +159,9 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn load(&mut self, renderer: &mut Renderer) {
-        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(
-            renderer.device.as_ref().unwrap().clone(),
-        ));
         self.buffer = Some(
             Buffer::from_iter(
-                memory_allocator.clone(),
+                renderer.memeory_allocator.as_ref().unwrap().clone(),
                 BufferCreateInfo {
                     usage: BufferUsage::VERTEX_BUFFER,
                     ..Default::default()
@@ -213,6 +210,7 @@ pub struct Renderer {
     queue_family_index: Option<u32>,
     pub device: Option<Arc<Device>>,
     pub queue: Option<Arc<Queue>>,
+    pub memeory_allocator: Option<Arc<StandardMemoryAllocator>>,
     pub render_pass: Option<Arc<RenderPass>>,
     pub swapchain: Option<Arc<Swapchain>>,
     images: Option<Vec<Arc<Image>>>,
@@ -514,7 +512,10 @@ impl Renderer {
                         let vp_set = PersistentDescriptorSet::new(
                             &descriptor_set_allocator,
                             pipeline.layout().set_layouts().get(0).unwrap().clone(),
-                            [WriteDescriptorSet::buffer(0, vp_buffer.staging_buffer.clone())],
+                            [WriteDescriptorSet::buffer(
+                                0,
+                                vp_buffer.staging_buffer.clone(),
+                            )],
                             [],
                         )
                         .unwrap();
@@ -716,6 +717,7 @@ impl Renderer {
             queue_family_index: None,
             device: None,
             queue: None,
+            memeory_allocator: None,
             render_pass: None,
             swapchain: None,
             images: None,
@@ -770,6 +772,9 @@ impl Renderer {
         .unwrap();
         self.queue = Some(queues.next().unwrap());
         self.device = Some(device);
+        self.memeory_allocator = Some(Arc::new(StandardMemoryAllocator::new_default(
+            self.device.as_ref().unwrap().clone(),
+        )));
         self.get_swapchain(window);
         self.get_render_pass();
         self.get_framebuffers();
