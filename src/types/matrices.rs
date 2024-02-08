@@ -1,3 +1,5 @@
+use std::ops::Mul;
+
 use bytemuck::{Pod, Zeroable};
 
 use crate::types::vectors::*;
@@ -5,6 +7,23 @@ use crate::types::vectors::*;
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
 #[repr(C)]
 pub struct Matrix4f([[f32; 4]; 4]);
+
+impl Mul for Matrix4f {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let mut output = Matrix4f::indentity();
+        for i in (0..4).step_by(1) {
+            for j in (0..4).step_by(1) {
+                output.0[i][j] = 0.0;
+                for k in (0..4).step_by(1) {
+                    output.0[i][j] += self.0[k][j] * rhs.0[i][k];
+                }
+            }
+        }
+        output
+    }
+}
 
 impl Matrix4f {
     pub fn indentity() -> Matrix4f {
@@ -22,6 +41,15 @@ impl Matrix4f {
             [0.0, 1.0, 0.0, 0.0],
             [0.0, 0.0, 1.0, 0.0],
             [-vec.x, vec.y, vec.z, 1.0],
+        ])
+    }
+    
+    pub fn scale(vec: Vec3f) -> Matrix4f {
+        Matrix4f([
+            [vec.x, 0.0, 0.0, 0.0],
+            [0.0, vec.y, 0.0, 0.0],
+            [0.0, 0.0, vec.z, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
         ])
     }
 

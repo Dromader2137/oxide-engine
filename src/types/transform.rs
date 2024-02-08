@@ -7,13 +7,15 @@ use super::{buffers::UpdatableBuffer, matrices::Matrix4f};
 #[derive(Clone, Debug)]
 pub struct Transform {
     pub position: Vec3d,
+    pub scale: Vec3f,
     pub buffer: Option<UpdatableBuffer<Matrix4f>>,
 }
 
 impl Transform {
-    pub fn new(pos: Vec3d) -> Transform {
+    pub fn new(pos: Vec3d, scl: Vec3f) -> Transform {
         Transform {
             position: pos,
+            scale: scl,
             buffer: None,
         }
     }

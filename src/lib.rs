@@ -78,13 +78,14 @@ pub fn run(mut world: World) {
     {
         transform.as_mut().unwrap().load(&renderer);
         let position = transform.as_ref().unwrap().position;
+        let scale = transform.as_ref().unwrap().scale;
         transform
             .as_mut()
             .unwrap()
             .buffer
             .as_mut()
             .unwrap()
-            .write(Matrix4f::translation(position.to_vec3f()));
+            .write(Matrix4f::scale(scale) * Matrix4f::translation(position.to_vec3f()));
     }
     renderer.update_command_buffers(&mut world, &shader_manager, &vp_buffer);
 
