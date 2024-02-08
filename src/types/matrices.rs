@@ -53,6 +53,39 @@ impl Matrix4f {
         ])
     }
 
+    pub fn rotation_x(angle: f32) -> Matrix4f {
+        Matrix4f([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, angle.cos(), angle.sin(), 0.0],
+            [0.0, -angle.sin(), angle.cos(), 0.0],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+    }
+    
+    pub fn rotation_z(angle: f32) -> Matrix4f {
+        Matrix4f([
+            [angle.cos(), 0.0, -angle.sin(), 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [angle.sin(), 0.0, angle.cos(), 0.0],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+    }
+    
+    pub fn rotation_y(angle: f32) -> Matrix4f {
+        Matrix4f([
+            [angle.cos(), angle.sin(), 0.0, 0.0],
+            [-angle.sin(), angle.cos(), 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+    }
+
+    pub fn rotation(xyz: Vec3f) -> Matrix4f {
+        Matrix4f::rotation_z(xyz.z) *
+        Matrix4f::rotation_y(xyz.y) *
+        Matrix4f::rotation_x(xyz.x)
+    }
+
     pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Matrix4f {
         let f = 1.0 / (fovy / 2.0).tan();
         let a = (far + near) / (near - far);

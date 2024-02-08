@@ -68,25 +68,30 @@ pub fn run(mut world: World) {
     let mut now = Instant::now();
     let mut dbg = 0.0;
 
-    for mesh in world.borrow_component_vec_mut::<Mesh>().unwrap().iter_mut() {
+    for mesh in world
+        .borrow_component_vec_mut::<Mesh>()
+        .unwrap()
+        .iter_mut() 
+    {
         mesh.as_mut().unwrap().load(&mut renderer);
     }
+
     for transform in world
         .borrow_component_vec_mut::<Transform>()
         .unwrap()
-        .iter_mut()
+        .iter_mut() 
     {
         transform.as_mut().unwrap().load(&renderer);
         let position = transform.as_ref().unwrap().position;
         let scale = transform.as_ref().unwrap().scale;
+        let rotation = transform.as_ref().unwrap().rotation;
         transform
             .as_mut()
             .unwrap()
             .buffer
             .as_mut()
             .unwrap()
-            .write(Matrix4f::translation(position.to_vec3f()) * Matrix4f::scale(scale));
-        println!("{:?} {:?} {:?}", Matrix4f::scale(scale), Matrix4f::translation(position.to_vec3f()), Matrix4f::translation(position.to_vec3f()) * Matrix4f::scale(scale));
+            .write(Matrix4f::translation(position.to_vec3f()) * Matrix4f::rotation(rotation) * Matrix4f::scale(scale));
     }
     renderer.update_command_buffers(&mut world, &shader_manager, &vp_buffer);
 
