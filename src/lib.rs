@@ -91,7 +91,7 @@ pub fn run(mut world: World) {
             .buffer
             .as_mut()
             .unwrap()
-            .write(Matrix4f::translation(position.to_vec3f()) * Matrix4f::rotation(rotation) * Matrix4f::scale(scale));
+            .write(Matrix4f::translation(position.to_vec3f()) * Matrix4f::rotation_yxz(rotation) * Matrix4f::scale(scale));
     }
     renderer.update_command_buffers(&mut world, &shader_manager, &vp_buffer);
 

@@ -80,10 +80,10 @@ impl Matrix4f {
         ])
     }
 
-    pub fn rotation(xyz: Vec3f) -> Matrix4f {
+    pub fn rotation_yxz(xyz: Vec3f) -> Matrix4f {
         Matrix4f::rotation_z(xyz.z) *
-        Matrix4f::rotation_y(xyz.y) *
-        Matrix4f::rotation_x(xyz.x)
+        Matrix4f::rotation_x(xyz.x) *
+        Matrix4f::rotation_y(xyz.y)
     }
 
     pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Matrix4f {
