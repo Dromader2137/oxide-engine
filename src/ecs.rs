@@ -3,6 +3,13 @@ use std::{
     cell::{RefCell, RefMut},
 };
 
+use crate::rendering::Renderer;
+
+pub trait System {
+    fn on_start(&self, world: &World, renderer: &mut Renderer);
+    fn on_update(&self, world: &World, renderer: &mut Renderer);
+}
+
 pub trait Component {}
 
 pub trait ComponentVec {
@@ -14,6 +21,7 @@ pub trait ComponentVec {
 pub struct World {
     pub entity_count: usize,
     pub components: Vec<Box<dyn ComponentVec>>,
+    pub systems: Vec<Box<dyn System>>
 }
 
 impl World {
@@ -21,6 +29,7 @@ impl World {
         World {
             entity_count: 0,
             components: Vec::new(),
+            systems: Vec::new()
         }
     }
 
@@ -67,6 +76,22 @@ impl World {
             }
         }
         None
+    }
+
+    pub fn add_system<SystemType: 'static + System>(&mut self, system: SystemType) {
+        self.systems.push(Box::new(system));
+    }
+
+    pub fn start(&mut self, renderer: &mut Renderer) {
+        for system in self.systems.iter() {
+            system.on_start(self, renderer);
+        }
+    }
+    
+    pub fn update(&mut self, renderer: &mut Renderer) {
+        for system in self.systems.iter() {
+            system.on_update(self, renderer);
+        }
     }
 }
 

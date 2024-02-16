@@ -40,7 +40,7 @@ impl Matrix4f {
             [1.0, 0.0, 0.0, 0.0],
             [0.0, 1.0, 0.0, 0.0],
             [0.0, 0.0, 1.0, 0.0],
-            [-vec.x, vec.y, vec.z, 1.0],
+            [vec.x, vec.y, vec.z, 1.0],
         ])
     }
     
@@ -62,7 +62,7 @@ impl Matrix4f {
         ])
     }
     
-    pub fn rotation_z(angle: f32) -> Matrix4f {
+    pub fn rotation_y(angle: f32) -> Matrix4f {
         Matrix4f([
             [angle.cos(), 0.0, -angle.sin(), 0.0],
             [0.0, 1.0, 0.0, 0.0],
@@ -71,7 +71,7 @@ impl Matrix4f {
         ])
     }
     
-    pub fn rotation_y(angle: f32) -> Matrix4f {
+    pub fn rotation_z(angle: f32) -> Matrix4f {
         Matrix4f([
             [angle.cos(), angle.sin(), 0.0, 0.0],
             [-angle.sin(), angle.cos(), 0.0, 0.0],
@@ -81,9 +81,9 @@ impl Matrix4f {
     }
 
     pub fn rotation_yxz(xyz: Vec3f) -> Matrix4f {
-        Matrix4f::rotation_z(xyz.z) *
+        Matrix4f::rotation_y(xyz.y) *
         Matrix4f::rotation_x(xyz.x) *
-        Matrix4f::rotation_y(xyz.y)
+        Matrix4f::rotation_z(xyz.z) 
     }
 
     pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Matrix4f {
@@ -99,15 +99,23 @@ impl Matrix4f {
     }
 
     pub fn look_at(mut eye: Vec3f, mut dir: Vec3f, mut up: Vec3f) -> Matrix4f {
+        eye.y = eye.y * -1.0;
         let mut f = dir.normalize();
-        let mut s = f.cross(up.normalize()).normalize();
-        let u = s.cross(f);
+        let mut u = f.cross(up.normalize()).normalize();
+        let v = u.cross(f);
+        let w = Vec3f::new([-f.x, -f.y, -f.z]);
 
         Matrix4f([
-            [s.x, s.y, s.z, -eye.dot(s)],
-            [u.x, u.y, u.z, -eye.dot(u)],
-            [-f.x, -f.y, -f.z, eye.dot(f)],
-            [0.0, 0.0, 0.0, 1.0],
+            [u.x, v.x, w.x, 0.0],
+            [u.y, v.y, w.y, 0.0],
+            [u.z, v.z, w.z, 0.0],
+            [-eye.dot(u), -eye.dot(v), -eye.dot(w), 1.0],
         ])
+    }
+
+    pub fn vec_mul(&self, vec: Vec3f) -> Vec3f {
+        Vec3f::new([vec.x * self.0[0][0] + vec.y * self.0[0][1] + vec.z * self.0[0][2],
+                    vec.x * self.0[1][0] + vec.y * self.0[1][1] + vec.z * self.0[1][2],
+                    vec.x * self.0[2][0] + vec.y * self.0[2][1] + vec.z * self.0[2][2]])
     }
 }

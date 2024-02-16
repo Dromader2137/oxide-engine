@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs;
+use std::io::Read;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -6,7 +8,7 @@ use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Sub
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage,
-    PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
+    PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, CopyBufferInfo,
 };
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
@@ -42,11 +44,12 @@ use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError, VulkanLibrary};
 use winit::window::WindowBuilder;
 
-use crate::ecs::World;
+use crate::ecs::{World, System};
 use crate::types::buffers::*;
 use crate::types::matrices::*;
 use crate::types::transform::Transform;
 use crate::types::vectors::*;
+use crate::utility::read_file_to_words;
 
 #[derive(BufferContents, Vertex, Clone, Copy, Debug)]
 #[repr(C)]
@@ -59,11 +62,40 @@ pub struct VertexData {
     pub normal: Vec3f,
 }
 
-#[derive(Pod, Zeroable, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct VPData {
     pub view: Matrix4f,
     pub projection: Matrix4f,
+}
+
+#[derive(Clone, Copy)]
+pub struct Camera {
+    pub vfov: f32,
+    pub near: f32,
+    pub far: f32,
+}
+
+pub struct CameraUpdater {}
+
+impl System for CameraUpdater {
+    fn on_start(&self, _world: &World, _renderer: &mut Renderer) {}
+
+    fn on_update(&self, world: &World, renderer: &mut Renderer) {
+        let mut camera = world.borrow_component_vec_mut::<Camera>().unwrap();
+        let mut transform = world.borrow_component_vec_mut::<Transform>().unwrap();
+        let zip = camera.iter_mut().zip(transform.iter_mut());
+        let mut iter = zip.filter_map(|(camera, transform)| { Some((camera.as_mut()?, transform.as_mut()?)) });
+        let (_, transform_data) = iter.next().unwrap();
+        transform_data.rotation.y += 0.002;
+        let cam_rot = Matrix4f::rotation_yxz(transform_data.rotation);
+        renderer.vp_data.view = Matrix4f::look_at(
+            transform_data.position.to_vec3f(), 
+            cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
+            cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
+            );
+        renderer.vp_buffer.as_mut().unwrap().write(renderer.vp_data);
+    }
 }
 
 #[derive(Pod, Zeroable, Clone, Copy)]
@@ -117,7 +149,30 @@ impl ShaderManager {
         }
     }
 
-    pub fn load(&mut self, renderer: &mut Renderer, shaders: HashMap<String, ShaderData>) {
+    pub fn load(&mut self, renderer: &mut Renderer) {
+        let mut shaders: HashMap<String, ShaderData> = HashMap::new();
+        let mut shaders_file = fs::File::open("./shaders/bin/.shaders").unwrap();
+        let mut shaders_db = String::new();
+        shaders_file.read_to_string(&mut shaders_db).unwrap();
+        for shader in shaders_db.lines() {
+            let (name, shader_type) = shader.split_once(" ").unwrap();
+            let shader_type = if shader_type == "frag" {
+                ShaderType::Fragment
+            } else {
+                ShaderType::Vertex
+            };
+            let mut shader_path = "./shaders/bin/".to_owned();
+            shader_path.push_str(name);
+            shader_path.push_str(".spv");
+            shaders.insert(
+                name.to_string(),
+                ShaderData {
+                    shader_code: read_file_to_words(&shader_path),
+                    shader_type,
+                },
+                );
+        }
+
         let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
             .iter()
             .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Vertex))
@@ -178,6 +233,23 @@ impl Mesh {
     }
 }
 
+pub struct MeshUpdater {}
+
+impl System for MeshUpdater {
+    fn on_start(&self, world: &World, renderer: &mut Renderer) {
+        for mesh in world
+            .borrow_component_vec_mut::<Mesh>()
+            .unwrap()
+            .iter_mut()
+            .filter(|x| x.is_some())
+        {
+                mesh.as_mut().unwrap().load(renderer);
+        }
+    }
+
+    fn on_update(&self, _world: &World, _renderer: &mut Renderer) {}
+}
+
 pub struct Window {
     pub window_handle: Arc<winit::window::Window>,
 }
@@ -202,6 +274,7 @@ impl EventLoop {
     }
 }
 
+#[derive(Clone)]
 pub struct Renderer {
     library: Option<Arc<VulkanLibrary>>,
     instance: Option<Arc<Instance>>,
@@ -213,6 +286,8 @@ pub struct Renderer {
     pub memeory_allocator: Option<Arc<StandardMemoryAllocator>>,
     pub render_pass: Option<Arc<RenderPass>>,
     pub swapchain: Option<Arc<Swapchain>>,
+    pub vp_data: VPData,
+    pub vp_buffer: Option<UpdatableBuffer<VPData>>,
     images: Option<Vec<Arc<Image>>>,
     framebuffers: Option<Vec<Arc<Framebuffer>>>,
     pub viewport: Option<Viewport>,
@@ -424,7 +499,6 @@ impl Renderer {
         &mut self,
         world: &mut World,
         shaders: &ShaderManager,
-        vp_buffer: &UpdatableBuffer<VPData>,
     ) {
         let descriptor_set_allocator = StandardDescriptorSetAllocator::new(
             self.device.as_ref().unwrap().clone(),
@@ -451,35 +525,35 @@ impl Renderer {
                     )
                     .unwrap();
 
-                    // for transform in transforms.iter() {
-                    //     builder
-                    //         .copy_buffer(CopyBufferInfo::buffers(
-                    //             transform
-                    //                 .as_ref()
-                    //                 .unwrap()
-                    //                 .buffer
-                    //                 .as_ref()
-                    //                 .unwrap()
-                    //                 .staging_buffer
-                    //                 .clone(),
-                    //             transform
-                    //                 .as_ref()
-                    //                 .unwrap()
-                    //                 .buffer
-                    //                 .as_ref()
-                    //                 .unwrap()
-                    //                 .main_buffer
-                    //                 .clone(),
-                    //         ))
-                    //         .unwrap();
-                    // }
+                    for transform in transforms.iter().filter(|x| x.is_some()) {
+                        builder
+                            .copy_buffer(CopyBufferInfo::buffers(
+                                transform
+                                    .as_ref()
+                                    .unwrap()
+                                    .buffer
+                                    .as_ref()
+                                    .unwrap()
+                                    .staging_buffer
+                                    .clone(),
+                                transform
+                                    .as_ref()
+                                    .unwrap()
+                                    .buffer
+                                    .as_ref()
+                                    .unwrap()
+                                    .main_buffer
+                                    .clone(),
+                            ))
+                            .unwrap();
+                    }
 
                     builder
-                        // .copy_buffer(CopyBufferInfo::buffers(
-                        //     vp_buffer.staging_buffer.clone(),
-                        //     vp_buffer.main_buffer.clone(),
-                        // ))
-                        // .unwrap()
+                        .copy_buffer(CopyBufferInfo::buffers(
+                            self.vp_buffer.as_ref().unwrap().staging_buffer.clone(),
+                            self.vp_buffer.as_ref().unwrap().main_buffer.clone(),
+                        ))
+                        .unwrap()
                         .begin_render_pass(
                             RenderPassBeginInfo {
                                 clear_values: vec![
@@ -514,7 +588,7 @@ impl Renderer {
                             pipeline.layout().set_layouts().get(0).unwrap().clone(),
                             [WriteDescriptorSet::buffer(
                                 0,
-                                vp_buffer.staging_buffer.clone(),
+                                self.vp_buffer.as_ref().unwrap().main_buffer.clone(),
                             )],
                             [],
                         )
@@ -594,8 +668,6 @@ impl Renderer {
     pub fn handle_possible_resize(
         &mut self,
         window: &Window,
-        vp_data: &mut VPData,
-        vp_buffer: &UpdatableBuffer<VPData>,
         world: &mut World,
         shaders: &mut ShaderManager,
     ) {
@@ -618,12 +690,17 @@ impl Renderer {
             self.swapchain = Some(new_swapchain);
             self.images = Some(new_images);
             self.get_framebuffers();
-
-            vp_data.projection = Matrix4f::perspective(
-                (60.0_f32).to_radians(),
+            
+            let camera = world.borrow_component_vec_mut::<Camera>().unwrap();
+            let transform = world.borrow_component_vec_mut::<Transform>().unwrap();
+            let zip = camera.iter().zip(transform.iter());
+            let mut iter = zip.filter_map(|(camera, transform)| { Some((camera.as_ref()?, transform.as_ref()?)) });
+            let (camera_data, _) = iter.next().unwrap();
+            self.vp_data.projection = Matrix4f::perspective(
+                camera_data.vfov.to_radians(),
                 (new_dimensions.width as f32) / (new_dimensions.height as f32),
-                0.1,
-                10.0,
+                camera_data.near,
+                camera_data.far,
             );
 
             self.viewport.as_mut().unwrap().extent = new_dimensions.into();
@@ -633,7 +710,10 @@ impl Renderer {
                     shaders.library.get(&pipeline.1).unwrap(),
                 )
             }
-            self.update_command_buffers(world, shaders, vp_buffer);
+
+            drop(camera);
+            drop(transform);
+            self.update_command_buffers(world, shaders);
         }
     }
 
@@ -729,6 +809,8 @@ impl Renderer {
             frames_in_flight: 0,
             fences: None,
             previous_fence: 0,
+            vp_data: VPData { view: Matrix4f::indentity(), projection: Matrix4f::indentity() },
+            vp_buffer: None
         }
     }
 
@@ -775,6 +857,7 @@ impl Renderer {
         self.memeory_allocator = Some(Arc::new(StandardMemoryAllocator::new_default(
             self.device.as_ref().unwrap().clone(),
         )));
+        self.vp_buffer = Some(UpdatableBuffer::new(&self, BufferUsage::UNIFORM_BUFFER));
         self.get_swapchain(window);
         self.get_render_pass();
         self.get_framebuffers();
