@@ -7,7 +7,7 @@ use ecs::World;
 use rendering::{EventLoop, Renderer, ShaderManager, Window, CameraUpdater, MeshUpdater};
 use types::transform::TransformUpdater;
 
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, WindowEvent, KeyboardInput, ScanCode, VirtualKeyCode, ElementState};
 use winit::event_loop::ControlFlow;
 
 pub fn run(mut world: World) {
@@ -40,6 +40,32 @@ pub fn run(mut world: World) {
             } => {
                 renderer.window_resized = true;
             }
+            Event::WindowEvent { 
+                event: WindowEvent::KeyboardInput { 
+                    input: KeyboardInput { 
+                        virtual_keycode: Some(key),
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            } => {
+                println!("Pressed {:?}", key);
+            }
+            Event::WindowEvent { 
+                event: WindowEvent::KeyboardInput { 
+                    input: KeyboardInput { 
+                        virtual_keycode: Some(key),
+                        state: ElementState::Released,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            } => {
+                println!("Released {:?}", key);
+            }
             Event::MainEventsCleared => {
                 renderer.handle_possible_resize(&window,  &mut world, &mut shader_manager);
                 renderer.render();
@@ -47,5 +73,6 @@ pub fn run(mut world: World) {
                 world.update(&mut renderer);
             }
             _ => (),
-        });
+        }
+    );
 }

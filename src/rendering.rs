@@ -87,8 +87,8 @@ impl System for CameraUpdater {
         let zip = camera.iter_mut().zip(transform.iter_mut());
         let mut iter = zip.filter_map(|(camera, transform)| { Some((camera.as_mut()?, transform.as_mut()?)) });
         let (_, transform_data) = iter.next().unwrap();
-        transform_data.rotation.y += 0.002;
         let cam_rot = Matrix4f::rotation_yxz(transform_data.rotation);
+        transform_data.rotation.y += 0.01;
         renderer.vp_data.view = Matrix4f::look_at(
             transform_data.position.to_vec3f(), 
             cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
