@@ -42,6 +42,7 @@ use vulkano::swapchain::{
 use vulkano::sync::future::{FenceSignalFuture, JoinFuture};
 use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError, VulkanLibrary};
+use winit::raw_window_handle::HasRawDisplayHandle;
 use winit::window::WindowBuilder;
 
 use crate::ecs::{World, System};
@@ -269,7 +270,7 @@ pub struct EventLoop {
 impl EventLoop {
     pub fn new() -> EventLoop {
         EventLoop {
-            event_loop: winit::event_loop::EventLoop::new(),
+            event_loop: winit::event_loop::EventLoop::new().unwrap(),
         }
     }
 }
@@ -820,7 +821,7 @@ impl Renderer {
             Instance::new(
                 self.library.as_ref().unwrap().clone(),
                 InstanceCreateInfo {
-                    enabled_extensions: Surface::required_extensions(&event_loop.event_loop),
+                    enabled_extensions: Surface::required_extensions(&window.window_handle.raw_display_handle()),
                     ..Default::default()
                 },
             )
