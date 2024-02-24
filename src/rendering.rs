@@ -42,7 +42,6 @@ use vulkano::swapchain::{
 use vulkano::sync::future::{FenceSignalFuture, JoinFuture};
 use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError, VulkanLibrary};
-use winit::raw_window_handle::HasRawDisplayHandle;
 use winit::window::WindowBuilder;
 
 use crate::ecs::{World, System};
@@ -89,7 +88,6 @@ impl System for CameraUpdater {
         let mut iter = zip.filter_map(|(camera, transform)| { Some((camera.as_mut()?, transform.as_mut()?)) });
         let (_, transform_data) = iter.next().unwrap();
         let cam_rot = Matrix4f::rotation_yxz(transform_data.rotation);
-        transform_data.rotation.y += 0.01;
         renderer.vp_data.view = Matrix4f::look_at(
             transform_data.position.to_vec3f(), 
             cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
@@ -821,7 +819,7 @@ impl Renderer {
             Instance::new(
                 self.library.as_ref().unwrap().clone(),
                 InstanceCreateInfo {
-                    enabled_extensions: Surface::required_extensions(&window.window_handle.raw_display_handle()),
+                    enabled_extensions: Surface::required_extensions(&event_loop.event_loop),
                     ..Default::default()
                 },
             )

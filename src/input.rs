@@ -11,7 +11,7 @@ pub struct InputManager {
 
 impl InputManager {
     pub fn process_key_press(&mut self, key_code: Key) {
-        let already_there = self.down.insert(key_code);
+        let already_there = self.down.insert(key_code.clone());
         if already_there {
             self.pressed.insert(key_code);
         }

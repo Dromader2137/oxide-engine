@@ -9,7 +9,7 @@ use input::InputManager;
 use rendering::{EventLoop, Renderer, ShaderManager, Window, CameraUpdater, MeshUpdater};
 use types::transform::TransformUpdater;
 
-use winit::event::{Event, WindowEvent};
+use winit::{event::{Event, WindowEvent::{self, KeyboardInput}, KeyEvent, ElementState}, event_loop::ControlFlow};
 
 pub fn run(mut world: World) {
     let event_loop = EventLoop::new();
@@ -26,6 +26,7 @@ pub fn run(mut world: World) {
     world.start(&mut renderer);
 
     renderer.update_command_buffers(&mut world, &shader_manager);
+    event_loop.event_loop.set_control_flow(ControlFlow::Poll);
     event_loop
         .event_loop
         .run(move |event, elwt| match event {
@@ -33,7 +34,7 @@ pub fn run(mut world: World) {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                println!("Exit requested!");
+                println!("Close requested!");
                 elwt.exit();
             }
             Event::WindowEvent {
@@ -43,36 +44,36 @@ pub fn run(mut world: World) {
                 println!("Resizing!");
                 renderer.window_resized = true;
             }
-            // Event::WindowEvent { 
-            //     event: WindowEvent::KeyboardInput { 
-            //         input: Keybo { 
-            //             virtual_keycode: Some(key),
-            //             state: ElementState::Pressed,
-            //             ..
-            //         },
-            //         ..
-            //     },
-            //     ..
-            // } => {
-            //     let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
-            //     let mut input_manager = input_manager_list.iter_mut();
-            //     input_manager.next().unwrap().as_mut().unwrap().process_key_press(key);
-            // }
-            // Event::WindowEvent { 
-            //     event: WindowEvent::KeyboardInput { 
-            //         input: KeyboardInput { 
-            //             virtual_keycode: Some(key),
-            //             state: ElementState::Released,
-            //             ..
-            //         },
-            //         ..
-            //     },
-            //     ..
-            // } => {
-            //     let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
-            //     let mut input_manager = input_manager_list.iter_mut();
-            //     input_manager.next().unwrap().as_mut().unwrap().process_key_release(key);
-            // }
+            Event::WindowEvent { 
+                event: KeyboardInput {
+                    event: KeyEvent { 
+                        logical_key: key_code,
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            } => {
+                let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
+                let mut input_manager = input_manager_list.iter_mut();
+                input_manager.next().unwrap().as_mut().unwrap().process_key_press(key_code);
+            }
+            Event::WindowEvent { 
+                event: KeyboardInput {
+                    event: KeyEvent { 
+                        logical_key: key_code,
+                        state: ElementState::Released,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            } => {
+                let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
+                let mut input_manager = input_manager_list.iter_mut();
+                input_manager.next().unwrap().as_mut().unwrap().process_key_release(key_code);
+            }
             Event::AboutToWait => {
                 renderer.handle_possible_resize(&window,  &mut world, &mut shader_manager);
                 renderer.render();
@@ -84,5 +85,5 @@ pub fn run(mut world: World) {
             }
             _ => (),
         }
-    );
+    ).unwrap();
 }
