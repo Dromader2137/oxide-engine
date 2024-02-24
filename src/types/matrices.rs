@@ -85,6 +85,18 @@ impl Matrix4f {
         Matrix4f::rotation_x(xyz.x) *
         Matrix4f::rotation_z(xyz.z) 
     }
+    
+    pub fn rotation_zxy(xyz: Vec3f) -> Matrix4f {
+        Matrix4f::rotation_z(xyz.z) *
+        Matrix4f::rotation_x(xyz.x) *
+        Matrix4f::rotation_y(xyz.y) 
+    }
+    
+    pub fn rotation_xzy(xyz: Vec3f) -> Matrix4f {
+        Matrix4f::rotation_x(xyz.x) *
+        Matrix4f::rotation_z(xyz.z) *
+        Matrix4f::rotation_y(xyz.y) 
+    }
 
     pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Matrix4f {
         let f = 1.0 / (fovy / 2.0).tan();
