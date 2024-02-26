@@ -1,7 +1,7 @@
 use bytemuck::{Zeroable, Pod};
 use vulkano::buffer::BufferUsage;
 
-use crate::{rendering::Renderer, types::vectors::*, ecs::{System, World}};
+use crate::{rendering::{Renderer, Window}, types::vectors::*, ecs::{System, World}};
 
 use super::{buffers::UpdatableBuffer, matrices::Matrix4f};
 
@@ -53,7 +53,7 @@ impl Transform {
 pub struct TransformUpdater {}
 
 impl System for TransformUpdater {
-    fn on_start(&self, world: &World, renderer: &mut Renderer) {
+    fn on_start(&self, world: &World, renderer: &mut Renderer, _window: &Window) {
         for transform in world
             .borrow_component_vec_mut::<Transform>()
             .unwrap()
@@ -64,7 +64,7 @@ impl System for TransformUpdater {
         }
     }
 
-    fn on_update(&self, world: &World, _renderer: &mut Renderer) { 
+    fn on_update(&self, world: &World, _renderer: &mut Renderer, _window: &Window) { 
         for transform in world
             .borrow_component_vec_mut::<Transform>()
             .unwrap()

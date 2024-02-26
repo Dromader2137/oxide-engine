@@ -28,7 +28,7 @@ pub fn run(mut world: World) {
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
     world.add_system(MeshUpdater {});
-    world.start(&mut renderer);
+    world.start(&mut renderer, &window);
 
     renderer.update_command_buffers(&mut world, &shader_manager);
     event_loop.event_loop.set_control_flow(ControlFlow::Poll);
@@ -97,7 +97,7 @@ pub fn run(mut world: World) {
                 renderer.render();
                 renderer.wait_for_idle();
                 
-                world.update(&mut renderer);
+                world.update(&mut renderer, &window);
                 
                 let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
                 let input_manager = input_manager_list.iter_mut().next().unwrap().as_mut().unwrap();

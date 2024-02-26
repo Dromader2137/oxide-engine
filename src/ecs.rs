@@ -3,11 +3,11 @@ use std::{
     cell::{RefCell, RefMut},
 };
 
-use crate::rendering::Renderer;
+use crate::rendering::{Renderer, Window};
 
 pub trait System {
-    fn on_start(&self, world: &World, renderer: &mut Renderer);
-    fn on_update(&self, world: &World, renderer: &mut Renderer);
+    fn on_start(&self, world: &World, renderer: &mut Renderer, window: &Window);
+    fn on_update(&self, world: &World, renderer: &mut Renderer, window: &Window);
 }
 
 pub trait Component {}
@@ -82,15 +82,15 @@ impl World {
         self.systems.push(Box::new(system));
     }
 
-    pub fn start(&mut self, renderer: &mut Renderer) {
+    pub fn start(&mut self, renderer: &mut Renderer, window: &Window) {
         for system in self.systems.iter() {
-            system.on_start(self, renderer);
+            system.on_start(self, renderer, window);
         }
     }
     
-    pub fn update(&mut self, renderer: &mut Renderer) {
+    pub fn update(&mut self, renderer: &mut Renderer, window: &Window) {
         for system in self.systems.iter() {
-            system.on_update(self, renderer);
+            system.on_update(self, renderer, window);
         }
     }
 }

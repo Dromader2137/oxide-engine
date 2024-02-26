@@ -79,9 +79,8 @@ pub struct Camera {
 pub struct CameraUpdater {}
 
 impl System for CameraUpdater {
-    fn on_start(&self, _world: &World, _renderer: &mut Renderer) {}
-
-    fn on_update(&self, world: &World, renderer: &mut Renderer) {
+    fn on_start(&self, _world: &World, _renderer: &mut Renderer, _window: &Window) {}
+    fn on_update(&self, world: &World, renderer: &mut Renderer, _window: &Window) {
         let mut camera = world.borrow_component_vec_mut::<Camera>().unwrap();
         let mut transform = world.borrow_component_vec_mut::<Transform>().unwrap();
         let zip = camera.iter_mut().zip(transform.iter_mut());
@@ -235,7 +234,7 @@ impl Mesh {
 pub struct MeshUpdater {}
 
 impl System for MeshUpdater {
-    fn on_start(&self, world: &World, renderer: &mut Renderer) {
+    fn on_start(&self, world: &World, renderer: &mut Renderer, _window: &Window) {
         for mesh in world
             .borrow_component_vec_mut::<Mesh>()
             .unwrap()
@@ -246,7 +245,7 @@ impl System for MeshUpdater {
         }
     }
 
-    fn on_update(&self, _world: &World, _renderer: &mut Renderer) {}
+    fn on_update(&self, _world: &World, _renderer: &mut Renderer, _window: &Window) {}
 }
 
 pub struct Window {

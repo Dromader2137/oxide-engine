@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use winit::keyboard::Key;
 
-use crate::{types::vectors::Vec2f, ecs::{System, World}, rendering::Renderer};
+use crate::{types::vectors::Vec2f, ecs::{System, World}, rendering::{Renderer, Window}};
 
 #[derive(Clone, Debug)]
 pub struct InputManager {
@@ -55,8 +55,8 @@ impl InputManager {
 struct InputManagerUpdater {}
 
 impl System for InputManagerUpdater {
-    fn on_start(&self, _world: &World, _renderer: &mut Renderer) {}
-    fn on_update(&self, world: &World, _renderer: &mut Renderer) {
+    fn on_start(&self, _world: &World, _renderer: &mut Renderer, _window: &Window) {}
+    fn on_update(&self, world: &World, _renderer: &mut Renderer, _window: &Window) {
         let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
         let input_manager = input_manager_list.iter_mut().next().unwrap().as_mut().unwrap();
         input_manager.clear_temp();
