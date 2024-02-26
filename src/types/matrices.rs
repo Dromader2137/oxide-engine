@@ -111,7 +111,9 @@ impl Matrix4f {
     }
 
     pub fn look_at(mut eye: Vec3f, mut dir: Vec3f, mut up: Vec3f) -> Matrix4f {
-        eye.y = eye.y * -1.0;
+        up.x *= -1.0;
+        up.y *= -1.0;
+        up.z *= -1.0;
         let mut f = dir.normalize();
         let mut u = f.cross(up.normalize()).normalize();
         let v = u.cross(f);
