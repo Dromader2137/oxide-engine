@@ -79,8 +79,8 @@ pub struct Camera {
 pub struct CameraUpdater {}
 
 impl System for CameraUpdater {
-    fn on_start(&self, _world: &World, _renderer: &mut Renderer, _window: &Window) {}
-    fn on_update(&self, world: &World, renderer: &mut Renderer, _window: &Window) {
+    fn on_start(&self, _world: &World, _renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {}
+    fn on_update(&self, world: &World, renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {
         let mut camera = world.borrow_component_vec_mut::<Camera>().unwrap();
         let mut transform = world.borrow_component_vec_mut::<Transform>().unwrap();
         let zip = camera.iter_mut().zip(transform.iter_mut());
@@ -234,7 +234,7 @@ impl Mesh {
 pub struct MeshUpdater {}
 
 impl System for MeshUpdater {
-    fn on_start(&self, world: &World, renderer: &mut Renderer, _window: &Window) {
+    fn on_start(&self, world: &World, renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {
         for mesh in world
             .borrow_component_vec_mut::<Mesh>()
             .unwrap()
@@ -245,7 +245,7 @@ impl System for MeshUpdater {
         }
     }
 
-    fn on_update(&self, _world: &World, _renderer: &mut Renderer, _window: &Window) {}
+    fn on_update(&self, _world: &World, _renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {}
 }
 
 pub struct Window {
@@ -291,6 +291,7 @@ pub struct Renderer {
     pub viewport: Option<Viewport>,
     pub command_buffers: Option<Vec<Arc<PrimaryAutoCommandBuffer>>>,
     pub window_resized: bool,
+    pub command_buffer_outdated: bool,
     pub recreate_swapchain: bool,
     pub frames_in_flight: usize,
     pub fences: Option<
@@ -495,7 +496,7 @@ impl Renderer {
 
     pub fn update_command_buffers(
         &mut self,
-        world: &mut World,
+        world: &World,
         shaders: &ShaderManager,
     ) {
         let descriptor_set_allocator = StandardDescriptorSetAllocator::new(
@@ -713,6 +714,9 @@ impl Renderer {
             drop(transform);
             self.update_command_buffers(world, shaders);
         }
+        if self.command_buffer_outdated {
+            self.update_command_buffers(world, shaders);
+        }
     }
 
     pub fn render(&mut self) {
@@ -803,6 +807,7 @@ impl Renderer {
             viewport: None,
             command_buffers: None,
             window_resized: false,
+            command_buffer_outdated: false,
             recreate_swapchain: false,
             frames_in_flight: 0,
             fences: None,

@@ -28,7 +28,7 @@ pub fn run(mut world: World) {
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
     world.add_system(MeshUpdater {});
-    world.start(&mut renderer, &window);
+    world.start(&mut renderer, &window, &shader_manager);
 
     renderer.update_command_buffers(&mut world, &shader_manager);
     event_loop.event_loop.set_control_flow(ControlFlow::Poll);
@@ -93,11 +93,11 @@ pub fn run(mut world: World) {
                 input_manager.mouse_pos.y += y as f32;
             }
             Event::AboutToWait => {
-                renderer.handle_possible_resize(&window,  &mut world, &mut shader_manager);
+                renderer.handle_possible_resize(&window, &mut world, &mut shader_manager);
                 renderer.render();
                 renderer.wait_for_idle();
                 
-                world.update(&mut renderer, &window);
+                world.update(&mut renderer, &window, &shader_manager);
                 
                 let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
                 let input_manager = input_manager_list.iter_mut().next().unwrap().as_mut().unwrap();
