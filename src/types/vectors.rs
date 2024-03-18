@@ -1,3 +1,5 @@
+use std::ops::{Add, Div, Sub, Mul};
+
 use bytemuck::{Pod, Zeroable};
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -26,6 +28,118 @@ pub struct Vec3d {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+}
+
+impl Add for Vec2f {
+    type Output = Vec2f;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec2f::new([self.x + rhs.x, self.y + rhs.y]) 
+    }
+}
+
+impl Add for Vec3f {
+    type Output = Vec3f;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec3f::new([self.x + rhs.x, self.y + rhs.y, self.z + rhs.z]) 
+    }
+}
+
+impl Add for Vec2d {
+    type Output = Vec2d;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec2d::new([self.x + rhs.x, self.y + rhs.y]) 
+    }
+}
+
+impl Add for Vec3d {
+    type Output = Vec3d;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec3d::new([self.x + rhs.x, self.y + rhs.y, self.z + rhs.z]) 
+    }
+}
+
+impl Div for Vec2f {
+    type Output = Vec2f;
+    fn div(self, rhs: Self) -> Self::Output {
+        Vec2f::new([self.x / rhs.x, self.y / rhs.y])
+    }
+}
+
+impl Div for Vec3f {
+    type Output = Vec3f;
+    fn div(self, rhs: Self) -> Self::Output {
+        Vec3f::new([self.x / rhs.x, self.y / rhs.y, self.z / rhs.z]) 
+    }
+}
+
+impl Div for Vec2d {
+    type Output = Vec2d;
+    fn div(self, rhs: Self) -> Self::Output {
+        Vec2d::new([self.x / rhs.x, self.y / rhs.y]) 
+    }
+}
+
+impl Div for Vec3d {
+    type Output = Vec3d;
+    fn div(self, rhs: Self) -> Self::Output {
+        Vec3d::new([self.x / rhs.x, self.y / rhs.y, self.z / rhs.z]) 
+    }
+}
+
+impl Mul for Vec2f {
+    type Output = Vec2f;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Vec2f::new([self.x * rhs.x, self.y * rhs.y])
+    }
+}
+
+impl Mul for Vec3f {
+    type Output = Vec3f;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Vec3f::new([self.x * rhs.x, self.y * rhs.y, self.z * rhs.z]) 
+    }
+}
+
+impl Mul for Vec2d {
+    type Output = Vec2d;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Vec2d::new([self.x * rhs.x, self.y * rhs.y]) 
+    }
+}
+
+impl Mul for Vec3d {
+    type Output = Vec3d;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Vec3d::new([self.x * rhs.x, self.y * rhs.y, self.z * rhs.z]) 
+    }
+}
+
+impl Sub for Vec2f {
+    type Output = Vec2f;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec2f::new([self.x - rhs.x, self.y - rhs.y])
+    }
+}
+
+impl Sub for Vec3f {
+    type Output = Vec3f;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec3f::new([self.x - rhs.x, self.y - rhs.y, self.z - rhs.z]) 
+    }
+}
+
+impl Sub for Vec2d {
+    type Output = Vec2d;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec2d::new([self.x - rhs.x, self.y - rhs.y]) 
+    }
+}
+
+impl Sub for Vec3d {
+    type Output = Vec3d;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec3d::new([self.x - rhs.x, self.y - rhs.y, self.z - rhs.z]) 
+    }
 }
 
 impl Vec2f {
