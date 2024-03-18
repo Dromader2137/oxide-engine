@@ -3,10 +3,14 @@ pub mod rendering;
 pub mod types;
 pub mod utility;
 pub mod input;
+pub mod asset_library;
+pub mod state;
 
+use asset_library::AssetLibrary;
 use ecs::World;
 use input::InputManager;
-use rendering::{EventLoop, Renderer, ShaderManager, Window, CameraUpdater, MeshUpdater};
+use rendering::{EventLoop, Renderer, Window, CameraUpdater, MeshUpdater};
+use state::State;
 use types::transform::TransformUpdater;
 
 use winit::dpi::LogicalPosition;
@@ -16,21 +20,20 @@ use winit::event::WindowEvent::KeyboardInput;
 use winit::event::DeviceEvent::MouseMotion;
 use winit::window::CursorGrabMode;
 
-pub fn run(mut world: World) {
+pub fn run(mut world: World, mut assets: AssetLibrary) {
     let event_loop = EventLoop::new();
     let window = Window::new(&event_loop);
-    let mut renderer: Renderer = Renderer::new();
-    renderer.init(&event_loop, &window);
-    
-    let mut shader_manager = ShaderManager::new();
-    shader_manager.load(&mut renderer);
+    let input_manager = InputManager::new();
+    let mut state = State {window, event_loop, input: input_manager};
+    assets.renderer.init(&state);
 
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
     world.add_system(MeshUpdater {});
-    world.start(&mut renderer, &window, &shader_manager);
+    world.start(&assets, &state);
 
-    renderer.update_command_buffers(&mut world, &shader_manager);
+    assets.renderer.update_command_buffers(&mut world, &assets);
+
     event_loop.event_loop.set_control_flow(ControlFlow::Poll);
     window.window_handle.set_cursor_grab(CursorGrabMode::Locked).unwrap();
     window.window_handle.set_cursor_visible(false);
@@ -49,7 +52,7 @@ pub fn run(mut world: World) {
                 ..
             } => {
                 println!("Resizing!");
-                renderer.window_resized = true;
+                assets.renderer.window_resized = true;
             }
             Event::WindowEvent { 
                 event: KeyboardInput {
@@ -93,11 +96,11 @@ pub fn run(mut world: World) {
                 input_manager.mouse_pos.y += y as f32;
             }
             Event::AboutToWait => {
-                renderer.handle_possible_resize(&window, &mut world, &mut shader_manager);
-                renderer.render();
-                renderer.wait_for_idle();
+                assets.renderer.handle_possible_resize(&mut world, &assets, &state);
+                assets.renderer.render();
+                assets.renderer.wait_for_idle();
                 
-                world.update(&mut renderer, &window, &shader_manager);
+                world.update(&assets, &state);
                 
                 let mut input_manager_list = world.borrow_component_vec_mut::<InputManager>().unwrap();
                 let input_manager = input_manager_list.iter_mut().next().unwrap().as_mut().unwrap();

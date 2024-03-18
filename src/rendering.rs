@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
-use std::io::Read;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -31,10 +29,10 @@ use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::pipeline::{
-    GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo,
+    GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo
 };
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
-use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
+use vulkano::shader::ShaderModule;
 use vulkano::swapchain::{
     self, PresentFuture, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
     SwapchainPresentInfo,
@@ -44,12 +42,13 @@ use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError, VulkanLibrary};
 use winit::window::WindowBuilder;
 
+use crate::asset_library::AssetLibrary;
 use crate::ecs::{World, System};
+use crate::state::State;
 use crate::types::buffers::*;
 use crate::types::matrices::*;
 use crate::types::transform::Transform;
 use crate::types::vectors::*;
-use crate::utility::read_file_to_words;
 
 #[derive(BufferContents, Vertex, Clone, Copy, Debug)]
 #[repr(C)]
@@ -79,20 +78,22 @@ pub struct Camera {
 pub struct CameraUpdater {}
 
 impl System for CameraUpdater {
-    fn on_start(&self, _world: &World, _renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {}
-    fn on_update(&self, world: &World, renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {
+    fn on_start(&self, _world: &World, _assets: &AssetLibrary, _state: &State) {}
+    fn on_update(&self, world: &World, assets: &AssetLibrary, _state: &State) {
         let mut camera = world.borrow_component_vec_mut::<Camera>().unwrap();
         let mut transform = world.borrow_component_vec_mut::<Transform>().unwrap();
         let zip = camera.iter_mut().zip(transform.iter_mut());
         let mut iter = zip.filter_map(|(camera, transform)| { Some((camera.as_mut()?, transform.as_mut()?)) });
         let (_, transform_data) = iter.next().unwrap();
         let cam_rot = Matrix4f::rotation_xzy(transform_data.rotation);
-        renderer.vp_data.view = Matrix4f::look_at(
+        assets.renderer.vp_data.view = Matrix4f::look_at(
             transform_data.position.to_vec3f(), 
             cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
             cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
-            );
-        renderer.vp_buffer.as_mut().unwrap().write(renderer.vp_data);
+        );
+        assets.renderer.vp_buffer.as_mut().unwrap().write(
+            assets.renderer.vp_data
+        );
     }
 }
 
@@ -103,103 +104,15 @@ pub struct ModelData {
 }
 
 pub struct Shader {
-    pub shader: Arc<ShaderModule>,
-}
-
-fn load_shader_module(
-    shaders: &HashMap<String, ShaderData>,
-    device: &Arc<Device>,
-    name: &str,
-) -> Shader {
-    unsafe {
-        Shader {
-            shader: ShaderModule::new(
-                device.clone(),
-                ShaderModuleCreateInfo::new(shaders.get(name).unwrap().shader_code.as_slice()),
-            )
-            .unwrap(),
-        }
-    }
+    pub name: String,
+    pub shader_type: ShaderType,
+    pub data: Arc<ShaderModule>,
 }
 
 #[derive(Debug)]
 pub enum ShaderType {
     Fragment,
     Vertex,
-}
-
-#[derive(Debug)]
-pub struct ShaderData {
-    pub shader_code: Vec<u32>,
-    pub shader_type: ShaderType,
-}
-
-pub struct ShaderManager {
-    pub library: HashMap<String, Shader>,
-    pub pipelines: HashMap<(String, String), Arc<GraphicsPipeline>>,
-}
-
-impl ShaderManager {
-    pub fn new() -> ShaderManager {
-        ShaderManager {
-            library: HashMap::new(),
-            pipelines: HashMap::new(),
-        }
-    }
-
-    pub fn load(&mut self, renderer: &mut Renderer) {
-        let mut shaders: HashMap<String, ShaderData> = HashMap::new();
-        let mut shaders_file = fs::File::open("./shaders/bin/.shaders").unwrap();
-        let mut shaders_db = String::new();
-        shaders_file.read_to_string(&mut shaders_db).unwrap();
-        for shader in shaders_db.lines() {
-            let (name, shader_type) = shader.split_once(" ").unwrap();
-            let shader_type = if shader_type == "frag" {
-                ShaderType::Fragment
-            } else {
-                ShaderType::Vertex
-            };
-            let mut shader_path = "./shaders/bin/".to_owned();
-            shader_path.push_str(name);
-            shader_path.push_str(".spv");
-            shaders.insert(
-                name.to_string(),
-                ShaderData {
-                    shader_code: read_file_to_words(&shader_path),
-                    shader_type,
-                },
-                );
-        }
-
-        let vertex_shaders: Vec<(&String, &ShaderData)> = shaders
-            .iter()
-            .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Vertex))
-            .collect();
-
-        let fragment_shaders: Vec<(&String, &ShaderData)> = shaders
-            .iter()
-            .filter(|shader_data| matches!(shader_data.1.shader_type, ShaderType::Fragment))
-            .collect();
-
-        for (shader, _) in shaders.iter() {
-            self.library.insert(
-                shader.to_string(),
-                load_shader_module(&shaders, &renderer.device.clone().unwrap(), shader),
-            );
-        }
-
-        for (name_vert, _) in vertex_shaders.iter() {
-            for (name_frag, _) in fragment_shaders.iter() {
-                self.pipelines.insert(
-                    (name_vert.to_string(), name_frag.to_string()),
-                    renderer.get_pipeline(
-                        self.library.get(*name_vert).unwrap(),
-                        self.library.get(*name_frag).unwrap(),
-                    ),
-                );
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -225,8 +138,7 @@ impl Mesh {
                     ..Default::default()
                 },
                 self.mesh.clone(),
-            )
-            .unwrap(),
+            ).unwrap()
         );
     }
 }
@@ -234,20 +146,21 @@ impl Mesh {
 pub struct MeshUpdater {}
 
 impl System for MeshUpdater {
-    fn on_start(&self, world: &World, renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {
+    fn on_start(&self, world: &World, assets: &AssetLibrary, _state: &State) {
         for mesh in world
             .borrow_component_vec_mut::<Mesh>()
             .unwrap()
             .iter_mut()
             .filter(|x| x.is_some())
         {
-                mesh.as_mut().unwrap().load(renderer);
+            mesh.as_mut().unwrap().load(&mut assets.renderer);
         }
     }
 
-    fn on_update(&self, _world: &World, _renderer: &mut Renderer, _window: &Window, _shaders: &ShaderManager) {}
+    fn on_update(&self, _world: &World, _assets: &AssetLibrary, _state: &State) {}
 }
 
+#[derive(Clone, Debug)]
 pub struct Window {
     pub window_handle: Arc<winit::window::Window>,
 }
@@ -260,14 +173,15 @@ impl Window {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct EventLoop {
-    pub event_loop: winit::event_loop::EventLoop<()>,
+    pub event_loop: Arc<winit::event_loop::EventLoop<()>>,
 }
 
 impl EventLoop {
     pub fn new() -> EventLoop {
         EventLoop {
-            event_loop: winit::event_loop::EventLoop::new().unwrap(),
+            event_loop: Arc::new(winit::event_loop::EventLoop::new().unwrap()),
         }
     }
 }
@@ -294,22 +208,23 @@ pub struct Renderer {
     pub command_buffer_outdated: bool,
     pub recreate_swapchain: bool,
     pub frames_in_flight: usize,
-    pub fences: Option<
+    pub fences: 
+        Option<
         Vec<
-            Option<
-                Arc<
-                    FenceSignalFuture<
-                        PresentFuture<
-                            CommandBufferExecFuture<
-                                JoinFuture<Box<dyn GpuFuture>, SwapchainAcquireFuture>,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
+        Option<
+        Arc<
+        FenceSignalFuture<
+        PresentFuture<
+        CommandBufferExecFuture<
+        JoinFuture<
+            Box<
+                dyn GpuFuture
+            >, 
+            SwapchainAcquireFuture
+        >>>>>>>,
     >,
     pub previous_fence: usize,
+    pipelines: Arc<HashMap<(String, String), Arc<GraphicsPipeline>>>
 }
 
 impl Renderer {
@@ -439,8 +354,8 @@ impl Renderer {
     }
 
     pub fn get_pipeline(&mut self, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipeline> {
-        let vs = vs.shader.entry_point("main").unwrap();
-        let fs = fs.shader.entry_point("main").unwrap();
+        let vs = vs.data.entry_point("main").unwrap();
+        let fs = fs.data.entry_point("main").unwrap();
 
         let vertex_input_state = VertexData::per_vertex()
             .definition(&vs.info().input_interface)
@@ -497,7 +412,7 @@ impl Renderer {
     pub fn update_command_buffers(
         &mut self,
         world: &World,
-        shaders: &ShaderManager,
+        assets: &AssetLibrary,
     ) {
         let descriptor_set_allocator = StandardDescriptorSetAllocator::new(
             self.device.as_ref().unwrap().clone(),
@@ -576,7 +491,7 @@ impl Renderer {
                     // println!("{}", iter.count());
 
                     for (mesh, transform) in iter {
-                        let pipeline = shaders
+                        let pipeline = self
                             .pipelines
                             .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
                             .unwrap()
@@ -627,7 +542,7 @@ impl Renderer {
         )
     }
 
-    fn get_swapchain(&mut self, window: &Window) {
+    fn get_swapchain(&mut self, state: &State) {
         let (swapchain, images) = {
             let caps = self
                 .physical_device
@@ -636,7 +551,7 @@ impl Renderer {
                 .surface_capabilities(&self.surface.as_ref().unwrap(), Default::default())
                 .expect("failed to get surface capabilities");
 
-            let dimensions = window.window_handle.inner_size();
+            let dimensions = state.window.window_handle.inner_size();
             let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
             let image_format = self
                 .physical_device
@@ -666,15 +581,15 @@ impl Renderer {
 
     pub fn handle_possible_resize(
         &mut self,
-        window: &Window,
         world: &mut World,
-        shaders: &mut ShaderManager,
+        assets: &AssetLibrary,
+        state: &State
     ) {
         if self.window_resized || self.recreate_swapchain {
             self.recreate_swapchain = false;
             self.window_resized = false;
 
-            let new_dimensions = window.window_handle.inner_size();
+            let new_dimensions = state.window.window_handle.inner_size();
 
             let (new_swapchain, new_images) = self
                 .swapchain
@@ -703,19 +618,19 @@ impl Renderer {
             );
 
             self.viewport.as_mut().unwrap().extent = new_dimensions.into();
-            for (pipeline, val) in shaders.pipelines.iter_mut() {
+            for (pipeline, val) in self.pipelines.iter_mut() {
                 *val = self.get_pipeline(
-                    shaders.library.get(&pipeline.0).unwrap(),
-                    shaders.library.get(&pipeline.1).unwrap(),
+                    assets.shaders.iter().filter(|x| x.name == pipeline.0).next().unwrap(),
+                    assets.shaders.iter().filter(|x| x.name == pipeline.1).next().unwrap(),
                 )
             }
 
             drop(camera);
             drop(transform);
-            self.update_command_buffers(world, shaders);
+            self.update_command_buffers(world, assets);
         }
         if self.command_buffer_outdated {
-            self.update_command_buffers(world, shaders);
+            self.update_command_buffers(world, assets);
         }
     }
 
@@ -813,17 +728,25 @@ impl Renderer {
             fences: None,
             previous_fence: 0,
             vp_data: VPData { view: Matrix4f::indentity(), projection: Matrix4f::indentity() },
-            vp_buffer: None
+            vp_buffer: None,
+            pipelines: Arc::new(HashMap::new())
         }
     }
 
-    pub fn init(&mut self, event_loop: &EventLoop, window: &Window) {
+    pub fn init(
+        &mut self, 
+        state: &State
+    ) {
         self.library = Some(VulkanLibrary::new().expect("Vulkan library not found"));
         self.instance = Some(
             Instance::new(
                 self.library.as_ref().unwrap().clone(),
                 InstanceCreateInfo {
-                    enabled_extensions: Surface::required_extensions(&event_loop.event_loop),
+                    enabled_extensions: Surface::required_extensions(
+                                            &state. 
+                                             event_loop.
+                                             event_loop
+                    ),
                     ..Default::default()
                 },
             )
@@ -832,7 +755,7 @@ impl Renderer {
         self.surface = Some(
             Surface::from_window(
                 self.instance.as_ref().unwrap().clone(),
-                window.window_handle.clone(),
+                state.window.window_handle.clone(),
             )
             .unwrap(),
         );
@@ -861,12 +784,12 @@ impl Renderer {
             self.device.as_ref().unwrap().clone(),
         )));
         self.vp_buffer = Some(UpdatableBuffer::new(&self, BufferUsage::UNIFORM_BUFFER));
-        self.get_swapchain(window);
+        self.get_swapchain(state);
         self.get_render_pass();
         self.get_framebuffers();
         self.viewport = Some(Viewport {
             offset: [0.0, 0.0],
-            extent: window.window_handle.inner_size().into(),
+            extent: state.window.window_handle.inner_size().into(),
             depth_range: 0.0..=1.0,
         });
         self.frames_in_flight = self.images.as_ref().unwrap().len();
