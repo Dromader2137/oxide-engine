@@ -2,7 +2,12 @@ use std::collections::HashSet;
 
 use winit::keyboard::Key;
 
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, state::State, types::vectors::Vec2f};
+use crate::{
+    asset_library::AssetLibrary,
+    ecs::{System, World},
+    state::State,
+    types::vectors::Vec2f,
+};
 
 #[derive(Clone, Debug)]
 pub struct InputManager {
@@ -28,10 +33,13 @@ impl InputManager {
     }
 
     pub fn get_mouse_delta(&self) -> Vec2f {
-        if self.prev_mouse_pos.is_none() { 
+        if self.prev_mouse_pos.is_none() {
             Vec2f::new([0.0, 0.0])
-        } else { 
-            Vec2f::new([self.mouse_pos.x - self.prev_mouse_pos.unwrap().x, self.mouse_pos.y - self.prev_mouse_pos.unwrap().y])
+        } else {
+            Vec2f::new([
+                self.mouse_pos.x - self.prev_mouse_pos.unwrap().x,
+                self.mouse_pos.y - self.prev_mouse_pos.unwrap().y,
+            ])
         }
     }
 
@@ -42,12 +50,12 @@ impl InputManager {
     }
 
     pub fn new() -> InputManager {
-        InputManager { 
-            pressed: HashSet::new(), 
-            down: HashSet::new(), 
+        InputManager {
+            pressed: HashSet::new(),
+            down: HashSet::new(),
             released: HashSet::new(),
             mouse_pos: Vec2f::new([0.0, 0.0]),
-            prev_mouse_pos: None
+            prev_mouse_pos: None,
         }
     }
 }
@@ -55,8 +63,8 @@ impl InputManager {
 struct InputManagerUpdater {}
 
 impl System for InputManagerUpdater {
-    fn on_start(&self, _world: &World, _assets: &AssetLibrary, _state: &State) {}
-    fn on_update(&self, _world: &World, _assets: &AssetLibrary, state: &State) {
+    fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
+    fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, state: &mut State) {
         state.input.clear_temp();
     }
 }

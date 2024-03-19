@@ -1,7 +1,10 @@
-use crate::{input::InputManager, rendering::{EventLoop, Window}};
+use crate::{
+    input::InputManager,
+    rendering::{Renderer, Window},
+};
 
 pub struct State {
     pub window: Window,
-    pub event_loop: EventLoop,
-    pub input: InputManager
+    pub input: InputManager,
+    pub renderer: Renderer,
 }

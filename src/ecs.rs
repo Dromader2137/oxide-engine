@@ -6,8 +6,8 @@ use std::{
 use crate::{asset_library::AssetLibrary, state::State};
 
 pub trait System {
-    fn on_start(&self, world: &World, assets: &AssetLibrary, state: &State);
-    fn on_update(&self, world: &World, assets: &AssetLibrary, state: &State);
+    fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State);
+    fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State);
 }
 
 pub trait Component {}
@@ -21,7 +21,7 @@ pub trait ComponentVec {
 pub struct World {
     pub entity_count: usize,
     pub components: Vec<Box<dyn ComponentVec>>,
-    pub systems: Vec<Box<dyn System>>
+    pub systems: Vec<Box<dyn System>>,
 }
 
 impl World {
@@ -29,7 +29,7 @@ impl World {
         World {
             entity_count: 0,
             components: Vec::new(),
-            systems: Vec::new()
+            systems: Vec::new(),
         }
     }
 
@@ -82,13 +82,13 @@ impl World {
         self.systems.push(Box::new(system));
     }
 
-    pub fn start(&mut self, assets: &AssetLibrary, state: &State) {
+    pub fn start(&mut self, assets: &mut AssetLibrary, state: &mut State) {
         for system in self.systems.iter() {
             system.on_start(self, assets, state);
         }
     }
-    
-    pub fn update(&mut self, assets: &AssetLibrary, state: &State) {
+
+    pub fn update(&mut self, assets: &mut AssetLibrary, state: &mut State) {
         for system in self.systems.iter() {
             system.on_update(self, assets, state);
         }

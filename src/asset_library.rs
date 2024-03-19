@@ -1,7 +1,6 @@
-use crate::rendering::{Mesh, Renderer, Shader};
+use crate::rendering::{Mesh, Shader};
 
 pub struct AssetLibrary {
     pub meshes: Vec<Mesh>,
     pub shaders: Vec<Shader>,
-    pub renderer: Renderer
 }
