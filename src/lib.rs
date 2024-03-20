@@ -6,6 +6,8 @@ pub mod state;
 pub mod types;
 pub mod utility;
 
+use std::time::Instant;
+
 use asset_library::AssetLibrary;
 use ecs::World;
 use input::InputManager;
@@ -25,10 +27,13 @@ use winit::window::CursorGrabMode;
 
 pub fn run(mut world: World, mut assets: AssetLibrary) {
     let event_loop = EventLoop::new();
+    let timer = Instant::now();
     let mut state = State {
         window: Window::new(&event_loop),
         input: InputManager::new(),
         renderer: Renderer::new(),
+        time: 0.0,
+        delta_time: 0.0
     };
     
     rendering::init(&mut state);
@@ -105,6 +110,10 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
                 handle_possible_resize(&mut world, &assets, &mut state);
                 render(&mut state);
                 wait_for_idle(&mut state);
+
+                let current_time = (timer.elapsed().as_millis() as f64) / 1000.0;
+                state.delta_time = current_time - state.time;
+                state.time = current_time;
 
                 world.update(&mut assets, &mut state);
 
