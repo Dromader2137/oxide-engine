@@ -11,19 +11,18 @@ use std::time::Instant;
 use asset_library::AssetLibrary;
 use ecs::World;
 use input::InputManager;
-use rendering::{
-    handle_possible_resize, render, update_command_buffers, wait_for_idle, CameraUpdater, EventLoop, MeshLoader, Renderer, ShaderLoader, Window
-};
+use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
+use types::camera::CameraUpdater;
+use types::mesh::MeshLoader;
+use types::shader::ShaderLoader;
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
-use winit::dpi::LogicalPosition;
 use winit::event::DeviceEvent::MouseMotion;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::ControlFlow;
-use winit::window::CursorGrabMode;
 
 pub fn run(mut world: World, mut assets: AssetLibrary) {
     let event_loop = EventLoop::new();
@@ -37,22 +36,15 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     };
     
     rendering::init(&mut state);
-
+    
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
     world.add_system(MeshLoader {});
     world.add_system(ShaderLoader {});
+    world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 
-    update_command_buffers(&mut world, &assets, &mut state);
-
     event_loop.event_loop.set_control_flow(ControlFlow::Poll);
-    state
-        .window
-        .window_handle
-        .set_cursor_grab(CursorGrabMode::Locked)
-        .unwrap();
-    state.window.window_handle.set_cursor_visible(false);
     event_loop
         .event_loop
         .run(move |event, elwt| match event {
@@ -107,10 +99,6 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
                 state.input.mouse_pos = state.input.mouse_pos + Vec2f::new([x as f32, y as f32]);
             }
             Event::AboutToWait => {
-                handle_possible_resize(&mut world, &assets, &mut state);
-                render(&mut state);
-                wait_for_idle(&mut state);
-
                 let current_time = (timer.elapsed().as_millis() as f64) / 1000.0;
                 state.delta_time = current_time - state.time;
                 state.time = current_time;
@@ -118,12 +106,6 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
                 world.update(&mut assets, &mut state);
 
                 state.input.clear_temp();
-                let size = state.window.window_handle.inner_size();
-                state
-                    .window
-                    .window_handle
-                    .set_cursor_position(LogicalPosition::new(size.width / 2, size.height / 2))
-                    .unwrap();
             }
             _ => (),
         })

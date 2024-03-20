@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::buffer::{BufferContents, BufferUsage};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, CopyBufferInfo,
@@ -18,7 +18,7 @@ use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::memory::allocator::{AllocationCreateInfo, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
 use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
@@ -32,7 +32,6 @@ use vulkano::pipeline::{
     GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo,
 };
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
-use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use vulkano::swapchain::{
     self, PresentFuture, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo,
     SwapchainPresentInfo,
@@ -46,11 +45,12 @@ use crate::asset_library::AssetLibrary;
 use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::buffers::*;
+use crate::types::camera::Camera;
 use crate::types::matrices::*;
+use crate::types::shader::Shader;
 use crate::types::static_mesh::StaticMesh;
 use crate::types::transform::Transform;
 use crate::types::vectors::*;
-use crate::utility::read_file_to_words;
 
 #[derive(BufferContents, Vertex, Clone, Copy, Debug)]
 #[repr(C)]
@@ -70,143 +70,11 @@ pub struct VPData {
     pub projection: Matrix4f,
 }
 
-#[derive(Clone, Copy)]
-pub struct Camera {
-    pub vfov: f32,
-    pub near: f32,
-    pub far: f32,
-}
-
-pub struct CameraUpdater {}
-
-impl System for CameraUpdater {
-    fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
-    fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        let mut camera = world.borrow_component_vec_mut::<Camera>().unwrap();
-        let mut transform = world.borrow_component_vec_mut::<Transform>().unwrap();
-        let zip = camera.iter_mut().zip(transform.iter_mut());
-        let mut iter =
-            zip.filter_map(|(camera, transform)| Some((camera.as_mut()?, transform.as_mut()?)));
-        let (_, transform_data) = iter.next().unwrap();
-        let cam_rot = Matrix4f::rotation_xzy(transform_data.rotation);
-        state.renderer.vp_data.view = Matrix4f::look_at(
-            transform_data.position.to_vec3f(),
-            cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
-            cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
-        );
-        state
-            .renderer
-            .vp_buffer
-            .as_mut()
-            .unwrap()
-            .write(state.renderer.vp_data);
-    }
-}
 
 #[derive(Pod, Zeroable, Clone, Copy)]
 #[repr(C)]
 pub struct ModelData {
     pub translation: Matrix4f,
-}
-
-#[derive(Debug)]
-pub enum ShaderType {
-    Fragment,
-    Vertex,
-}
-
-#[derive(Debug)]
-pub struct Shader {
-    pub name: String,
-    pub shader_type: ShaderType,
-    pub source: Vec<u32>,
-    pub data: Option<Arc<ShaderModule>>,
-}
-
-impl Shader {
-    pub fn load(&mut self, renderer: &mut Renderer) {
-        unsafe {
-            self.data = Some(ShaderModule::new(
-                renderer.device.as_ref().unwrap().clone(), 
-                ShaderModuleCreateInfo::new(self.source.as_slice())
-            ).unwrap());
-        }
-    }
-
-    pub fn new(name: String, shader_type: ShaderType) -> Shader {
-        Shader {
-            name: name.clone(),
-            shader_type,
-            source: read_file_to_words(format!("shaders/bin/{}.spv", name).as_str()),
-            data: None
-        }
-    }
-}
-
-pub struct ShaderLoader {}
-
-impl System for ShaderLoader {
-    fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        for shader in assets.shaders.iter_mut() {
-            shader.load(&mut state.renderer);
-        }
-
-        let fragment_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::Fragment));
-        let vertex_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::Vertex));
-        
-        for frag in fragment_shaders {
-            for vert in vertex_shaders.clone() {
-                state.renderer.pipelines.insert(
-                    (vert.name.clone(), frag.name.clone()),
-                    get_pipeline(state, vert, frag)
-                );
-            }
-        }
-    }
-    fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
-}
-
-#[derive(Debug)]
-pub struct Mesh {
-    pub name: String,
-    pub mesh: Vec<VertexData>,
-    pub vertex: String,
-    pub fragment: String,
-    pub buffer: Option<Subbuffer<[VertexData]>>,
-}
-
-impl Mesh {
-    pub fn load(&mut self, renderer: &mut Renderer) {
-        self.buffer = Some(
-            Buffer::from_iter(
-                renderer.memeory_allocator.as_ref().unwrap().clone(),
-                BufferCreateInfo {
-                    usage: BufferUsage::VERTEX_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                self.mesh.clone(),
-            )
-            .unwrap(),
-        );
-    }
-}
-
-pub struct MeshLoader {}
-
-impl System for MeshLoader {
-    fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        for mesh in assets.meshes.iter_mut() {
-            mesh.load(&mut state.renderer);
-        }
-    }
-    fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
 }
 
 #[derive(Clone, Debug)]
@@ -272,7 +140,7 @@ pub struct Renderer {
         >,
     >,
     pub previous_fence: usize,
-    pipelines: HashMap<(String, String), Arc<GraphicsPipeline>>,
+    pub pipelines: HashMap<(String, String), Arc<GraphicsPipeline>>,
 }
 
 fn select_physical_device(state: &mut State, device_extensions: &DeviceExtensions) {
@@ -459,7 +327,7 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
     .unwrap()
 }
 
-pub fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut State) {
+fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut State) {
     let descriptor_set_allocator = StandardDescriptorSetAllocator::new(
         state.renderer.device.as_ref().unwrap().clone(),
         Default::default(),
@@ -594,9 +462,16 @@ pub fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut 
                             (vp_set.clone(), m_set.clone()),
                         )
                         .unwrap()
-                        .bind_vertex_buffers(0, mesh.buffer.as_ref().unwrap().clone())
+                        .bind_index_buffer(mesh.index_buffer.as_ref().unwrap().clone())
                         .unwrap()
-                        .draw(mesh.mesh.len() as u32, 1, 0, 0)
+                        .bind_vertex_buffers(0, mesh.vertex_buffer.as_ref().unwrap().clone())
+                        .unwrap()
+                        .draw_indexed(
+                            mesh.index_buffer.as_ref().unwrap().len() as u32, 
+                            1, 
+                            0, 
+                            0, 
+                            0)
                         .unwrap();
                 }
 
@@ -652,7 +527,7 @@ fn get_swapchain(state: &mut State) {
     state.renderer.images = Some(images);
 }
 
-pub fn handle_possible_resize(world: &mut World, assets: &AssetLibrary, state: &mut State) {
+fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut State) {
     if state.renderer.window_resized || state.renderer.recreate_swapchain {
         state.renderer.recreate_swapchain = false;
         state.renderer.window_resized = false;
@@ -720,7 +595,7 @@ pub fn handle_possible_resize(world: &mut World, assets: &AssetLibrary, state: &
     }
 }
 
-pub fn render(state: &mut State) {
+fn render(state: &mut State) {
     let (image_i, suboptimal, acquire_future) = match swapchain::acquire_next_image(
         state.renderer.swapchain.as_ref().unwrap().clone(),
         None,
@@ -786,7 +661,7 @@ pub fn render(state: &mut State) {
     state.renderer.previous_fence = image_i as usize;
 }
 
-pub fn wait_for_idle(state: &mut State) {
+fn wait_for_idle(state: &mut State) {
     for fence in state.renderer.fences.as_mut().unwrap().iter_mut() {
         let _ = match fence.as_mut() {
             Some(val) => val.wait(None).unwrap(),
@@ -856,6 +731,7 @@ pub fn init(state: &mut State) {
     state.renderer.frames_in_flight = state.renderer.images.as_ref().unwrap().len();
     state.renderer.fences = Some(vec![None; state.renderer.frames_in_flight]);
 }
+
 impl Renderer {
     pub fn new() -> Renderer {
         Renderer {
@@ -886,5 +762,19 @@ impl Renderer {
             vp_buffer: None,
             pipelines: HashMap::new(),
         }
+    }
+}
+
+pub struct RendererHandler {}
+
+impl System for RendererHandler {
+    fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
+        update_command_buffers(world, assets, state);
+    }
+
+    fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
+        handle_possible_resize(world, assets, state);
+        render(state);
+        wait_for_idle(state);
     }
 }
