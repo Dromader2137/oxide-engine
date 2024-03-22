@@ -46,6 +46,7 @@ use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::buffers::*;
 use crate::types::camera::Camera;
+use crate::types::material::Attachment;
 use crate::types::matrices::*;
 use crate::types::shader::Shader;
 use crate::types::static_mesh::StaticMesh;
@@ -99,6 +100,12 @@ impl EventLoop {
         EventLoop {
             event_loop: winit::event_loop::EventLoop::new().unwrap(),
         }
+    }
+}
+
+impl Default for EventLoop {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -272,8 +279,8 @@ fn get_framebuffers(state: &mut State) {
 }
 
 pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipeline> {
-    let vs = vs.data.as_ref().unwrap().entry_point("main").unwrap();
-    let fs = fs.data.as_ref().unwrap().entry_point("main").unwrap();
+    let vs = vs.module.as_ref().unwrap().entry_point("main").unwrap();
+    let fs = fs.module.as_ref().unwrap().entry_point("main").unwrap();
 
     let vertex_input_state = VertexData::per_vertex()
         .definition(&vs.info().input_interface)
@@ -417,16 +424,21 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
 
                 for (static_mesh, transform) in iter {
                     let mesh = assets.meshes.iter().find(|x| x.name == static_mesh.mesh_name).unwrap();
+                    let material = assets.materials.iter().find(|x| x.name == mesh.material).unwrap();
                     let pipeline = state
                         .renderer
                         .pipelines
-                        .get(&(mesh.vertex.clone(), mesh.fragment.clone()))
+                        .get(&(material.vertex_shader.clone(), material.fragment_shader.clone()))
                         .unwrap()
                         .clone();
 
+                    builder
+                        .bind_pipeline_graphics(pipeline.clone())
+                        .unwrap();
+                    
                     let vp_set = PersistentDescriptorSet::new(
                         &descriptor_set_allocator,
-                        pipeline.layout().set_layouts().get(0).unwrap().clone(),
+                        pipeline.layout().set_layouts().first().unwrap().clone(),
                         [WriteDescriptorSet::buffer(
                             0,
                             state
@@ -452,26 +464,49 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                     )
                     .unwrap();
 
-                    builder
-                        .bind_pipeline_graphics(pipeline.clone())
-                        .unwrap()
-                        .bind_descriptor_sets(
+                    if !material.attachments.is_empty() {
+                        let att_set = PersistentDescriptorSet::new(
+                            &descriptor_set_allocator,
+                            pipeline.layout().set_layouts().get(2).unwrap().clone(),
+                            material.attachments.iter().map(
+                                |attachement| {
+                                    if let Attachment::Texture(tex) = attachement {
+                                        let texture = assets.textures.iter().find(|x| x.name == *tex).unwrap();
+                                        WriteDescriptorSet::image_view_sampler(
+                                            0, 
+                                            texture.image_view.as_ref().unwrap().clone(), 
+                                            texture.sampler.as_ref().unwrap().clone()
+                                            )
+                                    } else {
+                                        panic!("not impl");
+                                    }
+                                }
+                            ).collect::<Vec<_>>(), 
+                            [],
+                        ).unwrap();
+                        
+                        builder.bind_descriptor_sets(
+                            PipelineBindPoint::Graphics,
+                            pipeline.layout().clone(),
+                            0,
+                            (vp_set.clone(), m_set.clone(), att_set.clone()),
+                        ).unwrap();
+                    } else {
+                        builder.bind_descriptor_sets(
                             PipelineBindPoint::Graphics,
                             pipeline.layout().clone(),
                             0,
                             (vp_set.clone(), m_set.clone()),
-                        )
-                        .unwrap()
+                        ).unwrap();
+                    }
+
+                    builder
                         .bind_index_buffer(mesh.index_buffer.as_ref().unwrap().clone())
                         .unwrap()
                         .bind_vertex_buffers(0, mesh.vertex_buffer.as_ref().unwrap().clone())
                         .unwrap()
                         .draw_indexed(
-                            mesh.index_buffer.as_ref().unwrap().len() as u32, 
-                            1, 
-                            0, 
-                            0, 
-                            0)
+                            mesh.index_buffer.as_ref().unwrap().len() as u32, 1, 0, 0, 0)
                         .unwrap();
                 }
 
@@ -490,7 +525,7 @@ fn get_swapchain(state: &mut State) {
             .as_ref()
             .unwrap()
             .surface_capabilities(
-                &state.renderer.surface.as_ref().unwrap(),
+                state.renderer.surface.as_ref().unwrap(),
                 Default::default(),
             )
             .expect("failed to get surface capabilities");
@@ -503,7 +538,7 @@ fn get_swapchain(state: &mut State) {
             .as_ref()
             .unwrap()
             .surface_formats(
-                &state.renderer.surface.as_ref().unwrap(),
+                state.renderer.surface.as_ref().unwrap(),
                 Default::default(),
             )
             .unwrap()[0]
@@ -564,7 +599,7 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
 
         state.renderer.viewport.as_mut().unwrap().extent = new_dimensions.into();
         let iter: Vec<(String, String)> =
-            state.renderer.pipelines.keys().map(|x| x.clone()).collect();
+            state.renderer.pipelines.keys().cloned().collect();
         for pipeline in iter.iter() {
             state.renderer.pipelines.insert(
                 pipeline.clone(),
@@ -572,15 +607,11 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
                     state,
                     assets
                         .shaders
-                        .iter()
-                        .filter(|x| x.name == pipeline.0)
-                        .next()
+                        .iter().find(|x| x.name == pipeline.0)
                         .unwrap(),
                     assets
                         .shaders
-                        .iter()
-                        .filter(|x| x.name == pipeline.1)
-                        .next()
+                        .iter().find(|x| x.name == pipeline.1)
                         .unwrap(),
                 ),
             );
@@ -648,7 +679,9 @@ fn render(state: &mut State) {
 
     state.renderer.fences.as_mut().unwrap()[image_i as usize] =
         match future.map_err(Validated::unwrap) {
-            Ok(value) => Some(Arc::new(value)),
+            Ok(value) => {
+                Some(Arc::new(value))
+            },
             Err(VulkanError::OutOfDate) => {
                 state.renderer.recreate_swapchain = true;
                 None
@@ -663,9 +696,8 @@ fn render(state: &mut State) {
 
 fn wait_for_idle(state: &mut State) {
     for fence in state.renderer.fences.as_mut().unwrap().iter_mut() {
-        let _ = match fence.as_mut() {
-            Some(val) => val.wait(None).unwrap(),
-            _ => (),
+        if let Some(val) = fence.as_mut() {
+            val.wait(None).unwrap()
         };
     }
 }
@@ -762,6 +794,12 @@ impl Renderer {
             vp_buffer: None,
             pipelines: HashMap::new(),
         }
+    }
+}
+
+impl Default for Renderer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

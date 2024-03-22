@@ -6,3 +6,5 @@ pub mod static_mesh;
 pub mod camera;
 pub mod shader;
 pub mod mesh;
+pub mod material;
+pub mod texture;

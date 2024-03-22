@@ -7,8 +7,7 @@ pub struct Mesh {
     pub name: String,
     pub vertices: Vec<VertexData>,
     pub indices: Vec<u32>,
-    pub vertex: String,
-    pub fragment: String,
+    pub material: String,
     pub vertex_buffer: Option<Subbuffer<[VertexData]>>,
     pub index_buffer: Option<Subbuffer<[u32]>>,
 }

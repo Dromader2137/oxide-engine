@@ -16,6 +16,7 @@ use state::State;
 use types::camera::CameraUpdater;
 use types::mesh::MeshLoader;
 use types::shader::ShaderLoader;
+use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
@@ -41,6 +42,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     world.add_system(CameraUpdater {});
     world.add_system(MeshLoader {});
     world.add_system(ShaderLoader {});
+    world.add_system(TextureLoader {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 
