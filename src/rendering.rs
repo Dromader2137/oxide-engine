@@ -5,8 +5,7 @@ use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{BufferContents, BufferUsage};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, CopyBufferInfo,
-    PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
 };
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
@@ -122,6 +121,7 @@ pub struct Renderer {
     pub render_pass: Option<Arc<RenderPass>>,
     pub swapchain: Option<Arc<Swapchain>>,
     pub vp_data: VPData,
+    pub vp_pos: Vec3d,
     pub vp_buffer: Option<UpdatableBuffer<VPData>>,
     images: Option<Vec<Arc<Image>>>,
     framebuffers: Option<Vec<Arc<Framebuffer>>>,
@@ -189,13 +189,13 @@ fn get_render_pass(state: &mut State) {
         state.renderer.device.as_ref().unwrap().clone(),
         attachments: {
             inter: {
-                format: state.renderer.swapchain.as_ref().unwrap().image_format(), // set the format the same as the swapchain
+                format: state.renderer.swapchain.as_ref().unwrap().image_format(),
                 samples: 8,
                 load_op: Clear,
                 store_op: Store,
             },
             color: {
-                format: state.renderer.swapchain.as_ref().unwrap().image_format(), // set the format the same as the swapchain
+                format: state.renderer.swapchain.as_ref().unwrap().image_format(),
                 samples: 1,
                 load_op: Clear,
                 store_op: Store,
@@ -349,13 +349,8 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
     );
 
     state.renderer.command_buffers = Some(
-        state
-            .renderer
-            .framebuffers
-            .as_ref()
-            .unwrap()
-            .iter()
-            .map(|framebuffer| {
+        state.renderer.framebuffers.as_ref().unwrap().iter().enumerate()
+            .map(|(i, framebuffer)| {
                 let mut meshes = world.borrow_component_vec_mut::<StaticMesh>().unwrap();
                 let mut transforms = world.borrow_component_vec_mut::<Transform>().unwrap();
 
@@ -363,55 +358,14 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                     &command_buffer_allocator,
                     state.renderer.queue.as_ref().unwrap().queue_family_index(),
                     CommandBufferUsage::MultipleSubmit,
-                )
-                .unwrap();
-
-                for transform in transforms.iter().filter(|x| x.is_some()) {
-                    builder
-                        .copy_buffer(CopyBufferInfo::buffers(
-                            transform
-                                .as_ref()
-                                .unwrap()
-                                .buffer
-                                .as_ref()
-                                .unwrap()
-                                .staging_buffer
-                                .clone(),
-                            transform
-                                .as_ref()
-                                .unwrap()
-                                .buffer
-                                .as_ref()
-                                .unwrap()
-                                .main_buffer
-                                .clone(),
-                        ))
-                        .unwrap();
-                }
+                ).unwrap();
 
                 builder
-                    .copy_buffer(CopyBufferInfo::buffers(
-                        state
-                            .renderer
-                            .vp_buffer
-                            .as_ref()
-                            .unwrap()
-                            .staging_buffer
-                            .clone(),
-                        state
-                            .renderer
-                            .vp_buffer
-                            .as_ref()
-                            .unwrap()
-                            .main_buffer
-                            .clone(),
-                    ))
-                    .unwrap()
                     .begin_render_pass(
                         RenderPassBeginInfo {
                             clear_values: vec![
-                                Some([0.1, 0.1, 0.1, 1.0].into()),
-                                Some([0.1, 0.1, 0.1, 1.0].into()),
+                                Some([0.0, 0.0, 0.0, 1.0].into()),
+                                Some([0.0, 0.0, 0.0, 1.0].into()),
                                 Some(1f32.into()),
                             ],
                             ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
@@ -420,13 +374,13 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                             contents: SubpassContents::Inline,
                             ..Default::default()
                         },
-                    )
-                    .unwrap();
+                    ).unwrap();
 
                 let zip = meshes.iter_mut().zip(transforms.iter_mut());
-                let iter = zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?)));
+                let mut vec: Vec<_> = zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?))).collect();
+                vec.sort_by(|a, b| (a.1.position - state.renderer.vp_pos).length_sqr().total_cmp(&(b.1.position - state.renderer.vp_pos).length_sqr()));
 
-                for (static_mesh, transform) in iter {
+                for (static_mesh, transform) in vec.iter() {
                     let mesh = assets.meshes.iter().find(|x| x.name == static_mesh.mesh_name).unwrap();
                     let material = assets.materials.iter().find(|x| x.name == mesh.material).unwrap();
                     let pipeline = state
@@ -450,7 +404,9 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                                 .vp_buffer
                                 .as_ref()
                                 .unwrap()
-                                .main_buffer
+                                .buffers
+                                .get(i)
+                                .unwrap()
                                 .clone(),
                         )],
                         [],
@@ -462,7 +418,7 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                         pipeline.layout().set_layouts().get(1).unwrap().clone(),
                         [WriteDescriptorSet::buffer(
                             0,
-                            transform.buffer.as_ref().unwrap().staging_buffer.clone(),
+                            transform.buffer.as_ref().unwrap().buffers.get(i).unwrap().clone(),
                         )],
                         [],
                     )
@@ -626,6 +582,7 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
         update_command_buffers(world, assets, state);
     }
     if state.renderer.command_buffer_outdated {
+        state.renderer.command_buffer_outdated = false;
         update_command_buffers(world, assets, state);
     }
 }
@@ -663,9 +620,7 @@ fn render(state: &mut State) {
             Some(fence) => fence.boxed(),
         };
 
-    // Waiting for all fences to be able to write to buffers
-
-    let future = previous_future
+    let future = previous_future 
         .join(acquire_future)
         .then_execute(
             state.renderer.queue.as_ref().unwrap().clone(),
@@ -752,10 +707,6 @@ pub fn init(state: &mut State) {
     state.renderer.memeory_allocator = Some(Arc::new(StandardMemoryAllocator::new_default(
         state.renderer.device.as_ref().unwrap().clone(),
     )));
-    state.renderer.vp_buffer = Some(UpdatableBuffer::new(
-        &state.renderer,
-        BufferUsage::UNIFORM_BUFFER,
-    ));
     get_swapchain(state);
     get_render_pass(state);
     get_framebuffers(state);
@@ -766,6 +717,10 @@ pub fn init(state: &mut State) {
     });
     state.renderer.frames_in_flight = state.renderer.images.as_ref().unwrap().len();
     state.renderer.fences = Some(vec![None; state.renderer.frames_in_flight]);
+    state.renderer.vp_buffer = Some(UpdatableBuffer::new(
+        &state.renderer,
+        BufferUsage::UNIFORM_BUFFER,
+    ));
 }
 
 impl Renderer {
@@ -795,6 +750,7 @@ impl Renderer {
                 view: Matrix4f::indentity(),
                 projection: Matrix4f::indentity(),
             },
+            vp_pos: Vec3d::new([0.0, 0.0, 0.0]),
             vp_buffer: None,
             pipelines: HashMap::new(),
         }
@@ -811,12 +767,14 @@ pub struct RendererHandler {}
 
 impl System for RendererHandler {
     fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
+        state.renderer.vp_buffer.as_ref().unwrap().write_all(state, state.renderer.vp_data.clone());
         update_command_buffers(world, assets, state);
     }
 
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
         handle_possible_resize(world, assets, state);
         render(state);
+        println!("{} {:?}", state.renderer.previous_fence, state.renderer.fences.as_ref().unwrap().iter().map(|x| if x.is_some() {if x.as_ref().unwrap().is_signaled().unwrap() {1} else {0}} else {-1}).collect::<Vec<_>>());
         wait_for_idle(state);
     }
 }

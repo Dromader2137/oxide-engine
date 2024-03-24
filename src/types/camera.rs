@@ -21,16 +21,18 @@ impl System for CameraUpdater {
             zip.filter_map(|(camera, transform)| Some((camera.as_mut()?, transform.as_mut()?)));
         let (_, transform_data) = iter.next().unwrap();
         let cam_rot = Matrix4f::rotation_xzy(transform_data.rotation);
+        state.renderer.vp_pos = transform_data.position;
         state.renderer.vp_data.view = Matrix4f::look_at(
             transform_data.position.to_vec3f(),
             cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
             cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
         );
+        let vp_data = state.renderer.vp_data.clone();
         state
             .renderer
             .vp_buffer
-            .as_mut()
+            .as_ref()
             .unwrap()
-            .write(state.renderer.vp_data);
+            .write(state, vp_data);
     }
 }

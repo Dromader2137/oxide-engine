@@ -4,7 +4,6 @@ use vulkano::buffer::BufferUsage;
 use crate::{
     asset_library::AssetLibrary,
     ecs::{System, World},
-    rendering::Renderer,
     state::State,
     types::vectors::*,
 };
@@ -17,6 +16,7 @@ pub struct Transform {
     pub scale: Vec3f,
     pub rotation: Vec3f,
     pub buffer: Option<UpdatableBuffer<ModelData>>,
+    pub changed: bool
 }
 
 #[repr(C)]
@@ -33,16 +33,17 @@ impl Transform {
             scale: scl,
             rotation: rot,
             buffer: None,
+            changed: false
         }
     }
 
-    pub fn load(&mut self, renderer: &Renderer) {
-        self.buffer = Some(UpdatableBuffer::new(renderer, BufferUsage::UNIFORM_BUFFER));
-        self.update_buffer();
+    pub fn load(&mut self, state: &State) {
+        self.buffer = Some(UpdatableBuffer::new(&state.renderer, BufferUsage::UNIFORM_BUFFER));
+        self.update_buffer(state);
     }
 
-    pub fn update_buffer(&mut self) {
-        self.buffer.as_mut().unwrap().write(ModelData {
+    pub fn update_buffer(&mut self, state: &State) {
+        self.buffer.as_mut().unwrap().write_all(state, ModelData {
             model: Matrix4f::translation(self.position.to_vec3f())
                 * Matrix4f::rotation_yxz(self.rotation)
                 * Matrix4f::scale(self.scale),
@@ -61,18 +62,20 @@ impl System for TransformUpdater {
             .iter_mut()
             .filter(|x| x.is_some())
         {
-            transform.as_mut().unwrap().load(&state.renderer);
+            transform.as_mut().unwrap().load(state);
         }
     }
 
-    fn on_update(&self, world: &World, _assets: &mut AssetLibrary, _state: &mut State) {
+    fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
         for transform in world
             .borrow_component_vec_mut::<Transform>()
             .unwrap()
             .iter_mut()
             .filter(|x| x.is_some())
         {
-            transform.as_mut().unwrap().update_buffer();
+            if transform.as_mut().unwrap().changed {
+                transform.as_mut().unwrap().update_buffer(state);
+            }
         }
     }
 }
