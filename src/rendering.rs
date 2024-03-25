@@ -404,9 +404,7 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                                 .vp_buffer
                                 .as_ref()
                                 .unwrap()
-                                .buffers
-                                .get(i)
-                                .unwrap()
+                                .buffer
                                 .clone(),
                         )],
                         [],
@@ -418,7 +416,7 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                         pipeline.layout().set_layouts().get(1).unwrap().clone(),
                         [WriteDescriptorSet::buffer(
                             0,
-                            transform.buffer.as_ref().unwrap().buffers.get(i).unwrap().clone(),
+                            transform.buffer.as_ref().unwrap().buffer.clone(),
                         )],
                         [],
                     )
@@ -774,7 +772,7 @@ impl System for RendererHandler {
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
         handle_possible_resize(world, assets, state);
         render(state);
-        println!("{} {:?}", state.renderer.previous_fence, state.renderer.fences.as_ref().unwrap().iter().map(|x| if x.is_some() {if x.as_ref().unwrap().is_signaled().unwrap() {1} else {0}} else {-1}).collect::<Vec<_>>());
+        // println!("{} {:?}", state.renderer.previous_fence, state.renderer.fences.as_ref().unwrap().iter().map(|x| if x.is_some() {if x.as_ref().unwrap().is_signaled().unwrap() {1} else {0}} else {-1}).collect::<Vec<_>>());
         wait_for_idle(state);
     }
 }
