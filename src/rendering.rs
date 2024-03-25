@@ -47,6 +47,7 @@ use crate::types::buffers::*;
 use crate::types::camera::Camera;
 use crate::types::material::Attachment;
 use crate::types::matrices::*;
+use crate::types::mesh::DynamicMesh;
 use crate::types::shader::Shader;
 use crate::types::static_mesh::StaticMesh;
 use crate::types::transform::Transform;
@@ -351,7 +352,8 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
     state.renderer.command_buffers = Some(
         state.renderer.framebuffers.as_ref().unwrap().iter().enumerate()
             .map(|(i, framebuffer)| {
-                let mut meshes = world.borrow_component_vec_mut::<StaticMesh>().unwrap();
+                let mut static_meshes = world.borrow_component_vec_mut::<StaticMesh>().unwrap();
+                let mut dynamic_meshes = world.borrow_component_vec_mut::<DynamicMesh>().unwrap();
                 let mut transforms = world.borrow_component_vec_mut::<Transform>().unwrap();
 
                 let mut builder = AutoCommandBufferBuilder::primary(
@@ -376,11 +378,11 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                         },
                     ).unwrap();
 
-                let zip = meshes.iter_mut().zip(transforms.iter_mut());
-                let mut vec: Vec<_> = zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?))).collect();
-                vec.sort_by(|a, b| (a.1.position - state.renderer.vp_pos).length_sqr().total_cmp(&(b.1.position - state.renderer.vp_pos).length_sqr()));
+                let static_zip = static_meshes.iter_mut().zip(transforms.iter_mut());
+                let mut static_vec: Vec<_> = static_zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?))).collect();
+                static_vec.sort_by(|a, b| (a.1.position - state.renderer.vp_pos).length_sqr().total_cmp(&(b.1.position - state.renderer.vp_pos).length_sqr()));
 
-                for (static_mesh, transform) in vec.iter() {
+                for (static_mesh, transform) in static_vec.iter() {
                     let mesh = assets.meshes.iter().find(|x| x.name == static_mesh.mesh_name).unwrap();
                     let material = assets.materials.iter().find(|x| x.name == mesh.material).unwrap();
                     let pipeline = state
@@ -465,6 +467,97 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                         .unwrap()
                         .draw_indexed(
                             mesh.index_buffer.as_ref().unwrap().len() as u32, 1, 0, 0, 0)
+                        .unwrap();
+                }
+
+                let dynamic_zip = dynamic_meshes.iter_mut().zip(transforms.iter_mut());
+                let mut dynamic_vec: Vec<_> = dynamic_zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?))).collect();
+                dynamic_vec.sort_by(|a, b| (a.1.position - state.renderer.vp_pos).length_sqr().total_cmp(&(b.1.position - state.renderer.vp_pos).length_sqr()));
+
+                for (dynamic_mesh, transform) in dynamic_vec.iter() {
+                    let material = assets.materials.iter().find(|x| x.name == dynamic_mesh.material).unwrap();
+                    let pipeline = state
+                        .renderer
+                        .pipelines
+                        .get(&(material.vertex_shader.clone(), material.fragment_shader.clone()))
+                        .unwrap()
+                        .clone();
+
+                    builder
+                        .bind_pipeline_graphics(pipeline.clone())
+                        .unwrap();
+                    
+                    let vp_set = PersistentDescriptorSet::new(
+                        &descriptor_set_allocator,
+                        pipeline.layout().set_layouts().first().unwrap().clone(),
+                        [WriteDescriptorSet::buffer(
+                            0,
+                            state
+                                .renderer
+                                .vp_buffer
+                                .as_ref()
+                                .unwrap()
+                                .buffer
+                                .clone(),
+                        )],
+                        [],
+                    )
+                    .unwrap();
+
+                    let m_set = PersistentDescriptorSet::new(
+                        &descriptor_set_allocator,
+                        pipeline.layout().set_layouts().get(1).unwrap().clone(),
+                        [WriteDescriptorSet::buffer(
+                            0,
+                            transform.buffer.as_ref().unwrap().buffer.clone(),
+                        )],
+                        [],
+                    )
+                    .unwrap();
+
+                    if !material.attachments.is_empty() {
+                        let att_set = PersistentDescriptorSet::new(
+                            &descriptor_set_allocator,
+                            pipeline.layout().set_layouts().get(2).unwrap().clone(),
+                            material.attachments.iter().map(
+                                |attachement| {
+                                    if let Attachment::Texture(tex) = attachement {
+                                        let texture = assets.textures.iter().find(|x| x.name == *tex).unwrap();
+                                        WriteDescriptorSet::image_view_sampler(
+                                            0, 
+                                            texture.image_view.as_ref().unwrap().clone(), 
+                                            texture.sampler.as_ref().unwrap().clone()
+                                            )
+                                    } else {
+                                        panic!("not impl");
+                                    }
+                                }
+                            ).collect::<Vec<_>>(), 
+                            [],
+                        ).unwrap();
+                        
+                        builder.bind_descriptor_sets(
+                            PipelineBindPoint::Graphics,
+                            pipeline.layout().clone(),
+                            0,
+                            (vp_set.clone(), m_set.clone(), att_set.clone()),
+                        ).unwrap();
+                    } else {
+                        builder.bind_descriptor_sets(
+                            PipelineBindPoint::Graphics,
+                            pipeline.layout().clone(),
+                            0,
+                            (vp_set.clone(), m_set.clone()),
+                        ).unwrap();
+                    }
+
+                    builder
+                        .bind_index_buffer(dynamic_mesh.index_buffer.as_ref().unwrap().clone())
+                        .unwrap()
+                        .bind_vertex_buffers(0, dynamic_mesh.vertex_buffer.as_ref().unwrap().clone())
+                        .unwrap()
+                        .draw_indexed(
+                            dynamic_mesh..index_buffer.as_ref().unwrap().len() as u32, 1, 0, 0, 0)
                         .unwrap();
                 }
 

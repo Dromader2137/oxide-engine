@@ -70,6 +70,17 @@ pub struct DynamicMesh {
 }
 
 impl DynamicMesh {
+    pub fn from_mesh(mesh: String, assets: &AssetLibrary) -> DynamicMesh {
+        let mesh = assets.meshes.iter().find(|x| x.name == mesh).unwrap();
+        DynamicMesh {
+            vertices: mesh.vertices.clone(),
+            indices: mesh.indices.clone(),
+            material: mesh.material.clone(),
+            vertex_buffer: None,
+            index_buffer: None
+        }
+    }
+
     pub fn load(&mut self, renderer: &mut Renderer) {
         self.vertex_buffer = Some(
             Buffer::from_iter(
