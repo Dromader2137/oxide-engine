@@ -46,7 +46,7 @@ impl InputManager {
     pub fn clear_temp(&mut self) {
         self.pressed.clear();
         self.released.clear();
-        self.prev_mouse_pos = Some(self.mouse_pos.clone());
+        self.prev_mouse_pos = Some(self.mouse_pos);
     }
 
     pub fn new() -> InputManager {
@@ -57,6 +57,12 @@ impl InputManager {
             mouse_pos: Vec2f::new([0.0, 0.0]),
             prev_mouse_pos: None,
         }
+    }
+}
+
+impl Default for InputManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -14,7 +14,7 @@ use input::InputManager;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
-use types::mesh::MeshLoader;
+use types::mesh::{DynamicMeshLoader, MeshLoader};
 use types::shader::ShaderLoader;
 use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
@@ -41,6 +41,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
     world.add_system(MeshLoader {});
+    world.add_system(DynamicMeshLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
     world.add_system(RendererHandler {});
@@ -98,7 +99,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
                 event: MouseMotion { delta: (x, y) },
                 ..
             } => {
-                state.input.mouse_pos = state.input.mouse_pos + Vec2f::new([x as f32, y as f32]);
+                state.input.mouse_pos += Vec2f::new([x as f32, y as f32]);
             }
             Event::AboutToWait => {
                 let current_time = (timer.elapsed().as_millis() as f64) / 1000.0;

@@ -95,6 +95,12 @@ impl World {
     }
 }
 
+impl Default for World {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: 'static> ComponentVec for RefCell<Vec<Option<T>>> {
     fn as_any(&self) -> &dyn std::any::Any {
         self as &dyn std::any::Any

@@ -201,16 +201,16 @@ impl DynamicMesh {
             .then_signal_fence_and_flush()
             .unwrap();
 
-        future.wait(None).unwrap();
+        // future.wait(None).unwrap();
     }
 }
 
 pub struct DynamicMeshLoader {}
 
 impl System for DynamicMeshLoader {
-    fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        for mesh in assets.meshes.iter_mut() {
-            mesh.load(&mut state.renderer);
+    fn on_start(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
+        for mesh in world.borrow_component_vec_mut::<DynamicMesh>().unwrap().iter_mut().filter(|x| x.is_some()) {
+            mesh.as_mut().unwrap().load(&mut state.renderer);
         }
     }
     fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}

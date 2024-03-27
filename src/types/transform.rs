@@ -10,7 +10,7 @@ use crate::{
 
 use super::{buffers::UpdatableBuffer, matrices::Matrix4f};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Transform {
     pub position: Vec3d,
     pub scale: Vec3f,
