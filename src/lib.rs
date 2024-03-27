@@ -5,6 +5,7 @@ pub mod rendering;
 pub mod state;
 pub mod types;
 pub mod utility;
+pub mod ui;
 
 use std::time::Instant;
 
