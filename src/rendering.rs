@@ -856,7 +856,6 @@ impl System for RendererHandler {
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
         handle_possible_resize(world, assets, state);
         render(state);
-        // println!("{} {:?}", state.renderer.previous_fence, state.renderer.fences.as_ref().unwrap().iter().map(|x| if x.is_some() {if x.as_ref().unwrap().is_signaled().unwrap() {1} else {0}} else {-1}).collect::<Vec<_>>());
-        // wait_for_idle(state);
+        wait_for_idle(state);
     }
 }
