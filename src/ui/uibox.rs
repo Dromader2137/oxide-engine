@@ -1,6 +1,7 @@
-use crate::Vec2f;
-
-pub struct UIBox {
-    pub position_lu: Vec2f,
-    pub position_rd: Vec2f
+#[derive(Debug, Clone)]
+pub struct UiBox {
+    pub left: f32,
+    pub right: f32,
+    pub up: f32,
+    pub down: f32
 }

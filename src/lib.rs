@@ -21,6 +21,7 @@ use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
+use ui::uimanager::{UiManager, UiStorage};
 use winit::event::DeviceEvent::MouseMotion;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
@@ -33,6 +34,12 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
         window: Window::new(&event_loop),
         input: InputManager::new(),
         renderer: Renderer::new(),
+        ui: UiStorage { 
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            vertex_buffer: None,
+            index_buffer: None
+        },
         time: 0.0,
         delta_time: 0.0
     };
@@ -45,6 +52,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     world.add_system(DynamicMeshLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
+    world.add_system(UiManager {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 

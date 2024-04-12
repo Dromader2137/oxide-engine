@@ -268,6 +268,8 @@ fn get_framebuffers(state: &mut State) {
 }
 
 pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipeline> {
+    println!("{} {}", vs.name, fs.name);
+    
     let vs = vs.module.as_ref().unwrap().entry_point("main").unwrap();
     let fs = fs.module.as_ref().unwrap().entry_point("main").unwrap();
 
@@ -323,8 +325,7 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
             subpass: Some(subpass.into()),
             ..GraphicsPipelineCreateInfo::layout(layout)
         },
-    )
-    .unwrap()
+    ).unwrap()
 }
 
 fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut State) {
@@ -550,6 +551,23 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                             .unwrap();
                     }
                 }
+
+                let pipeline = state
+                    .renderer
+                    .pipelines
+                    .get(&("ui".to_string(), "ui-debug".to_string()))
+                    .unwrap()
+                    .clone();
+
+                builder
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .unwrap()
+                    .bind_index_buffer(state.ui.index_buffer.as_ref().unwrap().clone())
+                    .unwrap()
+                    .bind_vertex_buffers(0, state.ui.vertex_buffer.as_ref().unwrap().clone())
+                    .unwrap()
+                    .draw_indexed(state.ui.indices.len() as u32, 1, 0, 0, 0)
+                    .unwrap();
 
                 builder.end_render_pass(Default::default()).unwrap();
                 builder.build().unwrap()

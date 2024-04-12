@@ -7,6 +7,8 @@ use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_p
 pub enum ShaderType {
     Fragment,
     Vertex,
+    UiFragment,
+    UiVertex
 }
 
 #[derive(Debug)]
@@ -52,6 +54,20 @@ impl System for ShaderLoader {
         
         for frag in fragment_shaders {
             for vert in vertex_shaders.clone() {
+                state.renderer.pipelines.insert(
+                    (vert.name.clone(), frag.name.clone()),
+                    get_pipeline(state, vert, frag)
+                );
+            }
+        }
+        
+        let ui_fragment_shaders = assets.shaders.iter()
+            .filter(|x| matches!(x.shader_type, ShaderType::UiFragment));
+        let ui_vertex_shaders = assets.shaders.iter()
+            .filter(|x| matches!(x.shader_type, ShaderType::UiVertex));
+        
+        for frag in ui_fragment_shaders {
+            for vert in ui_vertex_shaders.clone() {
                 state.renderer.pipelines.insert(
                     (vert.name.clone(), frag.name.clone()),
                     get_pipeline(state, vert, frag)
