@@ -209,8 +209,8 @@ pub struct DynamicMeshLoader {}
 
 impl System for DynamicMeshLoader {
     fn on_start(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        for mesh in world.borrow_component_vec_mut::<DynamicMesh>().unwrap().iter_mut().filter(|x| x.is_some()) {
-            mesh.as_mut().unwrap().load(&mut state.renderer);
+        for (_, mesh) in world.entities.query::<&mut DynamicMesh>().iter() {
+            mesh.load(&mut state.renderer);
         }
     }
     fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}

@@ -56,25 +56,15 @@ pub struct TransformUpdater {}
 
 impl System for TransformUpdater {
     fn on_start(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        for transform in world
-            .borrow_component_vec_mut::<Transform>()
-            .unwrap()
-            .iter_mut()
-            .filter(|x| x.is_some())
-        {
-            transform.as_mut().unwrap().load(state);
+        for (_, transform) in world.entities.query::<&mut Transform>().iter() {
+            transform.load(state);
         }
     }
 
     fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        for transform in world
-            .borrow_component_vec_mut::<Transform>()
-            .unwrap()
-            .iter_mut()
-            .filter(|x| x.is_some())
-        {
-            if transform.as_mut().unwrap().changed {
-                transform.as_mut().unwrap().update_buffer(state);
+        for (_, transform) in world.entities.query::<&mut Transform>().iter() {
+            if transform.changed {
+                transform.update_buffer(state);
             }
         }
     }

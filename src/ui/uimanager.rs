@@ -1,14 +1,16 @@
 use bytemuck::{Pod, Zeroable};
-use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferInfo}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, sync::{now, GpuFuture}};
+use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferInfo}, format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::graphics::vertex_input::Vertex, sync::{now, GpuFuture}};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::Renderer, state::State, types::vectors::Vec2f};
 
 use super::uibox::UiBox;
 
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[derive(BufferContents, Vertex, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct UiVertexData {
+    #[format(R32G32_SFLOAT)]
     pub position: Vec2f,
+    #[format(R32G32_SFLOAT)]
     pub uv: Vec2f
 }
 
@@ -21,6 +23,8 @@ pub struct UiStorage {
 
 impl UiStorage {
     pub fn load(&mut self, renderer: &mut Renderer) {
+        if self.indices.is_empty() || self.vertices.is_empty() { return; }        
+
         self.vertex_buffer = Some(
             Buffer::from_iter(
                 renderer.memeory_allocator.as_ref().unwrap().clone(),
@@ -62,6 +66,7 @@ impl UiStorage {
             Default::default(),
         );
 
+        if self.indices.is_empty() || self.vertices.is_empty() { return; }        
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
             renderer.queue.as_ref().unwrap().queue_family_index(),
@@ -106,6 +111,7 @@ impl UiStorage {
             Default::default(),
         );
 
+        if self.indices.is_empty() || self.vertices.is_empty() { return; }        
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
             renderer.queue.as_ref().unwrap().queue_family_index(),
@@ -148,12 +154,12 @@ pub struct UiManager {}
 
 impl System for UiManager {
     fn on_start(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        let ui_boxes = world.borrow_component_vec_mut::<UiBox>().unwrap();
+        let mut ui_boxes = world.entities.query::<&UiBox>();
         let mut vertices: Vec<UiVertexData> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
 
         let mut ic: u32 = 0;
-        for ui_box in ui_boxes.iter().filter_map(|x| x.as_ref()) {
+        for (_, ui_box) in ui_boxes.iter() {
             vertices.push(UiVertexData { position: Vec2f::new([ui_box.right, ui_box.up]) , 
                 uv: Vec2f::new([1.0, 1.0])});
             vertices.push(UiVertexData { position: Vec2f::new([ui_box.right, ui_box.down]) , 
@@ -172,12 +178,12 @@ impl System for UiManager {
     }
 
     fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        let ui_boxes = world.borrow_component_vec_mut::<UiBox>().unwrap();
+        let mut ui_boxes = world.entities.query::<&UiBox>();
         let mut vertices: Vec<UiVertexData> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
 
         let mut ic: u32 = 0;
-        for ui_box in ui_boxes.iter().filter_map(|x| x.as_ref()) {
+        for (_, ui_box) in ui_boxes.iter() {
             vertices.push(UiVertexData { position: Vec2f::new([ui_box.right, ui_box.up]) , 
                 uv: Vec2f::new([1.0, 1.0])});
             vertices.push(UiVertexData { position: Vec2f::new([ui_box.right, ui_box.down]) , 

@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -48,10 +49,11 @@ use crate::types::camera::Camera;
 use crate::types::material::Attachment;
 use crate::types::matrices::*;
 use crate::types::mesh::DynamicMesh;
-use crate::types::shader::Shader;
+use crate::types::shader::{Shader, ShaderType};
 use crate::types::static_mesh::StaticMesh;
 use crate::types::transform::Transform;
 use crate::types::vectors::*;
+use crate::ui::uimanager::UiVertexData;
 
 #[derive(BufferContents, Vertex, Clone, Copy, Debug)]
 #[repr(C)]
@@ -269,13 +271,24 @@ fn get_framebuffers(state: &mut State) {
 
 pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipeline> {
     println!("{} {}", vs.name, fs.name);
+    let s_type = match vs.shader_type {
+        ShaderType::Vertex => 0,
+        ShaderType::UiVertex => 1,
+        _ => 0
+    };
     
     let vs = vs.module.as_ref().unwrap().entry_point("main").unwrap();
     let fs = fs.module.as_ref().unwrap().entry_point("main").unwrap();
 
-    let vertex_input_state = VertexData::per_vertex()
-        .definition(&vs.info().input_interface)
-        .unwrap();
+    let vertex_input_state = match s_type {
+        0 => VertexData::per_vertex()
+            .definition(&vs.info().input_interface)
+            .unwrap(),
+        1 => UiVertexData::per_vertex()
+            .definition(&vs.info().input_interface)
+            .unwrap(),
+        _ => panic!("sdffsd")
+    };
 
     let stages = [
         PipelineShaderStageCreateInfo::new(vs),
@@ -341,8 +354,6 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
     state.renderer.command_buffers = Some(
         state.renderer.framebuffers.as_ref().unwrap().iter()
             .map(|framebuffer| {
-                let mut transforms = world.borrow_component_vec_mut::<Transform>().unwrap();
-
                 let mut builder = AutoCommandBufferBuilder::primary(
                     &command_buffer_allocator,
                     state.renderer.queue.as_ref().unwrap().queue_family_index(),
@@ -365,12 +376,8 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                         },
                     ).unwrap();
 
-                if let Some(mut static_meshes) = world.borrow_component_vec_mut::<StaticMesh>() {
-                    let static_zip = static_meshes.iter_mut().zip(transforms.iter_mut());
-                    let mut static_vec: Vec<_> = static_zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?))).collect();
-                    static_vec.sort_by(|a, b| (a.1.position - state.renderer.vp_pos).length_sqr().total_cmp(&(b.1.position - state.renderer.vp_pos).length_sqr()));
-
-                    for (static_mesh, transform) in static_vec.iter() {
+                {
+                    for (_, (static_mesh, transform)) in world.entities.query::<(&StaticMesh, &Transform)>().iter() {
                         let mesh = assets.meshes.iter().find(|x| x.name == static_mesh.mesh_name).unwrap();
                         let material = assets.materials.iter().find(|x| x.name == mesh.material).unwrap();
                         let pipeline = state
@@ -459,12 +466,8 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                     }
                 };
 
-                if let Some(mut dynamic_meshes) = world.borrow_component_vec_mut::<DynamicMesh>() {
-                    let dynamic_zip = dynamic_meshes.iter_mut().zip(transforms.iter_mut());
-                    let mut dynamic_vec: Vec<_> = dynamic_zip.filter_map(|(mesh, transform)| Some((mesh.as_mut()?, transform.as_mut()?))).collect();
-                    dynamic_vec.sort_by(|a, b| (a.1.position - state.renderer.vp_pos).length_sqr().total_cmp(&(b.1.position - state.renderer.vp_pos).length_sqr()));
-
-                    for (dynamic_mesh, transform) in dynamic_vec.iter() {
+                {
+                    for (_, (dynamic_mesh, transform)) in world.entities.query::<(&DynamicMesh, &Transform)>().iter() {
                         let material = assets.materials.iter().find(|x| x.name == dynamic_mesh.material).unwrap();
                         let pipeline = state
                             .renderer
@@ -552,22 +555,24 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                     }
                 }
 
-                let pipeline = state
-                    .renderer
-                    .pipelines
-                    .get(&("ui".to_string(), "ui-debug".to_string()))
-                    .unwrap()
-                    .clone();
+                if state.ui.vertex_buffer.is_some() && state.ui.index_buffer.is_some() { 
+                    let pipeline = state
+                        .renderer
+                        .pipelines
+                        .get(&("ui".to_string(), "ui-debug".to_string()))
+                        .unwrap()
+                        .clone();
 
-                builder
-                    .bind_pipeline_graphics(pipeline.clone())
-                    .unwrap()
-                    .bind_index_buffer(state.ui.index_buffer.as_ref().unwrap().clone())
-                    .unwrap()
-                    .bind_vertex_buffers(0, state.ui.vertex_buffer.as_ref().unwrap().clone())
-                    .unwrap()
-                    .draw_indexed(state.ui.indices.len() as u32, 1, 0, 0, 0)
-                    .unwrap();
+                    builder
+                        .bind_pipeline_graphics(pipeline.clone())
+                        .unwrap()
+                        .bind_index_buffer(state.ui.index_buffer.as_ref().unwrap().clone())
+                        .unwrap()
+                        .bind_vertex_buffers(0, state.ui.vertex_buffer.as_ref().unwrap().clone())
+                        .unwrap()
+                        .draw_indexed(state.ui.indices.len() as u32, 1, 0, 0, 0)
+                        .unwrap();
+                }
 
                 builder.end_render_pass(Default::default()).unwrap();
                 builder.build().unwrap()
@@ -643,12 +648,8 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
         state.renderer.images = Some(new_images);
         get_framebuffers(state);
 
-        let camera = world.borrow_component_vec_mut::<Camera>().unwrap();
-        let transform = world.borrow_component_vec_mut::<Transform>().unwrap();
-        let zip = camera.iter().zip(transform.iter());
-        let mut iter =
-            zip.filter_map(|(camera, transform)| Some((camera.as_ref()?, transform.as_ref()?)));
-        let (camera_data, _) = iter.next().unwrap();
+        let mut camera = world.entities.query::<&Camera>();
+        let camera_data = camera.iter().next().expect("Camera not found").1;
         state.renderer.vp_data.projection = Matrix4f::perspective(
             camera_data.vfov.to_radians(),
             (new_dimensions.width as f32) / (new_dimensions.height as f32),
@@ -676,8 +677,6 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
             );
         }
 
-        drop(camera);
-        drop(transform);
         update_command_buffers(world, assets, state);
     }
     if state.renderer.command_buffer_outdated {
