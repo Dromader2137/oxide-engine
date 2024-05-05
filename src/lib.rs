@@ -52,7 +52,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     world.add_system(DynamicMeshLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
-    world.add_system(UiManager {});
+    // world.add_system(UiManager {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 

@@ -82,7 +82,7 @@ impl DynamicMesh {
     }
 
     pub fn load(&mut self, renderer: &mut Renderer) {
-        self.vertex_buffer = Some(
+        if self.vertices.len() != 0 { self.vertex_buffer = Some(
             Buffer::from_iter(
                 renderer.memeory_allocator.as_ref().unwrap().clone(),
                 BufferCreateInfo {
@@ -97,8 +97,8 @@ impl DynamicMesh {
                 self.vertices.clone(),
             )
             .unwrap(),
-        );
-        self.index_buffer = Some(
+        )};
+        if self.indices.len() != 0 { self.index_buffer = Some(
             Buffer::from_iter(
                 renderer.memeory_allocator.as_ref().unwrap().clone(),
                 BufferCreateInfo {
@@ -113,7 +113,7 @@ impl DynamicMesh {
                 self.indices.clone(),
             )
             .unwrap(),
-        );
+        )};
     }
 
     pub fn change_indices(&mut self, renderer: &Renderer, vec: Vec<u32>) {
@@ -123,6 +123,7 @@ impl DynamicMesh {
             Default::default(),
         );
 
+        if self.indices.len() == 0 || self.vertices.len() == 0 { return; }
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
             renderer.queue.as_ref().unwrap().queue_family_index(),
@@ -167,6 +168,7 @@ impl DynamicMesh {
             Default::default(),
         );
 
+        if self.indices.len() == 0 || self.vertices.len() == 0 { return; }
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
             renderer.queue.as_ref().unwrap().queue_family_index(),
