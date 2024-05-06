@@ -23,12 +23,5 @@ impl System for CameraUpdater {
             cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
             cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
         );
-        let vp_data = state.renderer.vp_data;
-        state
-            .renderer
-            .vp_buffer
-            .as_ref()
-            .unwrap()
-            .write(state, vp_data);
     }
 }

@@ -1,10 +1,11 @@
 use core::panic;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::usize;
 
 use bytemuck::{Pod, Zeroable};
-use vulkano::buffer::{BufferContents, BufferUsage};
-use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
 };
@@ -18,7 +19,7 @@ use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::{AllocationCreateInfo, StandardMemoryAllocator};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{AttachmentBlend, ColorBlendAttachmentState, ColorBlendState, ColorComponents};
 use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
@@ -123,15 +124,15 @@ pub struct Renderer {
     pub device: Option<Arc<Device>>,
     pub queue: Option<Arc<Queue>>,
     pub memeory_allocator: Option<Arc<StandardMemoryAllocator>>,
+    pub command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
     pub render_pass: Option<Arc<RenderPass>>,
     pub swapchain: Option<Arc<Swapchain>>,
     pub vp_data: VPData,
     pub vp_pos: Vec3d,
-    pub vp_buffer: Option<UpdatableBuffer<VPData>>,
+    pub vp_buffers: Option<Vec<Subbuffer<VPData>>>,
     images: Option<Vec<Arc<Image>>>,
     framebuffers: Option<Vec<Arc<Framebuffer>>>,
     pub viewport: Option<Viewport>,
-    pub command_buffers: Option<Vec<Arc<PrimaryAutoCommandBuffer>>>,
     pub window_resized: bool,
     pub command_buffer_outdated: bool,
     pub recreate_swapchain: bool,
@@ -345,17 +346,16 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
         state.renderer.device.as_ref().unwrap().clone(),
         Default::default(),
     );
-    let command_buffer_allocator = StandardCommandBufferAllocator::new(
-        state.renderer.device.as_ref().unwrap().clone(),
-        Default::default(),
-    );
 
     let framebuffer = state.renderer.framebuffers.as_ref().unwrap().get(image_id).unwrap();
     let mut builder = AutoCommandBufferBuilder::primary(
-        &command_buffer_allocator,
+        state.renderer.command_buffer_allocator.as_ref().unwrap().as_ref(),
         state.renderer.queue.as_ref().unwrap().queue_family_index(),
-        CommandBufferUsage::MultipleSubmit,
+        CommandBufferUsage::OneTimeSubmit,
         ).unwrap();
+    
+    let mut vertex_count = 0;
+    let mut index_count = 0;
 
     builder
         .begin_render_pass(
@@ -395,11 +395,12 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                     0,
                     state
                     .renderer
-                    .vp_buffer
+                    .vp_buffers
                     .as_ref()
                     .unwrap()
-                    .buffer
-                    .clone(),
+                    .get(image_id)
+                    .unwrap()
+                    .clone()
                     )],
                 [],
                 )
@@ -466,6 +467,8 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
     {
         for (_, (dynamic_mesh, transform)) in world.entities.query::<(&DynamicMesh, &Transform)>().iter() {
             if dynamic_mesh.vertex_buffer.is_none() || dynamic_mesh.index_buffer.is_none() { continue; }
+            vertex_count += dynamic_mesh.vertices.len();
+            index_count += dynamic_mesh.indices.len();
 
             let material = assets.materials.iter().find(|x| x.name == dynamic_mesh.material).unwrap();
             let pipeline = state
@@ -486,11 +489,12 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                     0,
                     state
                     .renderer
-                    .vp_buffer
+                    .vp_buffers
                     .as_ref()
                     .unwrap()
-                    .buffer
-                    .clone(),
+                    .get(image_id)
+                    .unwrap()
+                    .clone()
                     )],
                 [],
                 )
@@ -553,6 +557,8 @@ fn update_command_buffers(world: &World, assets: &AssetLibrary, state: &mut Stat
                 .unwrap();
         }
     }
+
+    println!("{} {}", vertex_count, index_count);
 
     builder.end_render_pass(Default::default()).unwrap();
     builder.build().unwrap()
@@ -692,6 +698,11 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
             }
             Some(fence) => fence.boxed(),
         };
+    
+    {
+        let mut contents = state.renderer.vp_buffers.as_ref().unwrap().get(image_i as usize).unwrap().write().unwrap();
+        *contents = state.renderer.vp_data;
+    }
 
     let future = previous_future 
         .join(acquire_future)
@@ -780,6 +791,16 @@ pub fn init(state: &mut State) {
     state.renderer.memeory_allocator = Some(Arc::new(StandardMemoryAllocator::new_default(
         state.renderer.device.as_ref().unwrap().clone(),
     )));
+    state.renderer.command_buffer_allocator = Some( 
+        Arc::new(
+            StandardCommandBufferAllocator::new(
+                state.renderer.device.as_ref().unwrap().clone(), 
+                StandardCommandBufferAllocatorCreateInfo {
+                    ..Default::default()  
+                }
+            )
+        )
+    );
     get_swapchain(state);
     get_render_pass(state);
     get_framebuffers(state);
@@ -790,10 +811,24 @@ pub fn init(state: &mut State) {
     });
     state.renderer.frames_in_flight = state.renderer.images.as_ref().unwrap().len();
     state.renderer.fences = Some(vec![None; state.renderer.frames_in_flight]);
-    state.renderer.vp_buffer = Some(UpdatableBuffer::new(
-        &state.renderer,
-        BufferUsage::UNIFORM_BUFFER,
-    ));
+    state.renderer.vp_buffers = Some(
+        vec![
+            Buffer::new_sized(
+                state.renderer.memeory_allocator.as_ref().unwrap().clone(), 
+            
+                BufferCreateInfo {
+                    usage: BufferUsage::UNIFORM_BUFFER | BufferUsage::TRANSFER_DST,
+                    ..Default::default()
+                }, 
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST |
+                        MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                    ..Default::default()
+                }
+            ).unwrap();
+            state.renderer.frames_in_flight
+        ]
+    );
 }
 
 impl Renderer {
@@ -807,12 +842,12 @@ impl Renderer {
             device: None,
             queue: None,
             memeory_allocator: None,
+            command_buffer_allocator: None,
             render_pass: None,
             swapchain: None,
             images: None,
             framebuffers: None,
             viewport: None,
-            command_buffers: None,
             window_resized: false,
             command_buffer_outdated: false,
             recreate_swapchain: false,
@@ -824,7 +859,7 @@ impl Renderer {
                 projection: Matrix4f::indentity(),
             },
             vp_pos: Vec3d::new([0.0, 0.0, 0.0]),
-            vp_buffer: None,
+            vp_buffers: None,
             pipelines: HashMap::new(),
         }
     }
@@ -839,9 +874,7 @@ impl Default for Renderer {
 pub struct RendererHandler {}
 
 impl System for RendererHandler {
-    fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        state.renderer.vp_buffer.as_ref().unwrap().write_all(state, state.renderer.vp_data);
-    }
+    fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {}
 
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
         handle_possible_resize(world, assets, state);
