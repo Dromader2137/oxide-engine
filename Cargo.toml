@@ -4,7 +4,7 @@ version = "0.0.2"
 edition = "2021"
 
 [dependencies]
-vulkano = "0.34.1"
+vulkano = { version = "0.34.1", features = ["document_unchecked"] }
 winit = { version = "0.29.10", features = ["rwh_05"] }
 bytemuck = "1.14.0"
 png = "0.17"
