@@ -12,6 +12,7 @@ use std::time::Instant;
 use asset_library::AssetLibrary;
 use ecs::World;
 use input::InputManager;
+use log::trace;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
@@ -28,6 +29,7 @@ use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 pub fn run(mut world: World, mut assets: AssetLibrary) {
+    env_logger::init();
     let event_loop = EventLoop::new();
     let timer = Instant::now();
     let mut state = State {
@@ -64,14 +66,14 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                println!("Close requested!");
+                trace!("Close requested!");
                 elwt.exit();
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(_),
                 ..
             } => {
-                println!("Resizing!");
+                trace!("Resizing!");
                 state.renderer.window_resized = true;
             }
             Event::WindowEvent {

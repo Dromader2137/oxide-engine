@@ -22,8 +22,8 @@ pub struct Transform {
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod, Debug)]
 pub struct ModelData {
-    model: Matrix4f,
-    rotation: Matrix4f,
+    pub model: Matrix4f,
+    pub rotation: Matrix4f,
 }
 
 impl Transform {
