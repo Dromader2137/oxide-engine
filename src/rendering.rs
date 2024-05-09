@@ -7,7 +7,7 @@ use std::{thread, time, usize};
 
 use bytemuck::{Pod, Zeroable};
 use hecs::Entity;
-use log::{error, trace};
+use log::{debug, error, trace};
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::command_buffer::{
@@ -30,7 +30,7 @@ use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexBuffersCollection, VertexDefinition};
+use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexBuffersCollection, VertexDefinition, VertexInputState};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
@@ -61,14 +61,11 @@ use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
 use crate::ui::uimanager::UiVertexData;
 
-#[derive(BufferContents, Vertex, Clone, Copy, Debug)]
+#[derive(Pod, Zeroable, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct VertexData {
-    #[format(R32G32B32_SFLOAT)]
     pub position: Vec3f,
-    #[format(R32G32_SFLOAT)]
     pub uv: Vec2f,
-    #[format(R32G32B32_SFLOAT)]
     pub normal: Vec3f,
 }
 
@@ -303,16 +300,6 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
     let vs = vs.module.as_ref().unwrap().entry_point("main").unwrap();
     let fs = fs.module.as_ref().unwrap().entry_point("main").unwrap();
 
-    let vertex_input_state = match s_type {
-        0 => VertexData::per_vertex()
-            .definition(&vs.info().input_interface)
-            .unwrap(),
-        1 => UiVertexData::per_vertex()
-            .definition(&vs.info().input_interface)
-            .unwrap(),
-        _ => panic!("sdffsd")
-    };
-
     let stages = [
         PipelineShaderStageCreateInfo::new(vs),
         PipelineShaderStageCreateInfo::new(fs),
@@ -333,7 +320,7 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
         None,
         GraphicsPipelineCreateInfo {
             stages: stages.into_iter().collect(),
-            vertex_input_state: Some(vertex_input_state),
+            vertex_input_state: Some(VertexInputState::new()),
             input_assembly_state: Some(InputAssemblyState::default()),
             viewport_state: Some(ViewportState {
                 viewports: [state.renderer.viewport.as_ref().unwrap().clone()]
@@ -384,13 +371,14 @@ fn calculate_per_material_buffer(world: &World, state: &mut State, material: &St
     let mut indirect = Vec::new();
 
     for (_, (mesh, transform)) in filtered_by_material {
+        if mesh.vertices.len() == 0 { continue; }
         if mesh.buffer_id.is_none() {
             pmb.vertex.insert(
                 pmb.id_count,
                 Buffer::from_iter(
                     state.renderer.memeory_allocator.as_ref().unwrap().clone(),
                     BufferCreateInfo {
-                        usage: BufferUsage::STORAGE_BUFFER,
+                        usage: BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
                         ..Default::default()
                     },
                     AllocationCreateInfo {
@@ -421,7 +409,7 @@ fn calculate_per_material_buffer(world: &World, state: &mut State, material: &St
                 instance_count: 1,
                 first_instance: counter,
                 vertex_count: mesh.vertices.len() as u32,
-                first_vertex: vertex_offset
+                first_vertex: 0
             }
         );
 
@@ -797,6 +785,7 @@ pub fn init(state: &mut State) {
         multi_draw_indirect: true,
         buffer_device_address: true,
         runtime_descriptor_array: true,
+        shader_int64: true,
         ..Features::empty()
     };
     select_physical_device(
