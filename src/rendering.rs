@@ -1,17 +1,17 @@
 use core::panic;
 use std::collections::HashMap;
-use std::ops::Neg;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use std::{thread, time, usize};
+
+use std::sync::{Arc};
+
+use std::{usize};
 
 use bytemuck::{Pod, Zeroable};
-use hecs::Entity;
-use log::{debug, error, trace};
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+
+use log::{debug, error};
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferInheritanceInfo, CommandBufferInheritanceRenderPassInfo, CommandBufferInheritanceRenderPassType, CommandBufferUsage, DrawIndexedIndirectCommand, DrawIndirectCommand, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo
+    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, DrawIndirectCommand, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents
 };
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
@@ -22,7 +22,7 @@ use vulkano::device::{
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
-use vulkano::instance::debug::ValidationFeatureEnable;
+
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{AttachmentBlend, ColorBlendAttachmentState, ColorBlendState, ColorComponents};
@@ -30,7 +30,7 @@ use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexBuffersCollection, VertexDefinition, VertexInputState};
+use vulkano::pipeline::graphics::vertex_input::VertexInputState;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
@@ -51,15 +51,15 @@ use winit::window::WindowBuilder;
 use crate::asset_library::AssetLibrary;
 use crate::ecs::{System, World};
 use crate::state::State;
-use crate::types::buffers::*;
+
 use crate::types::camera::Camera;
-use crate::types::material::Attachment;
+
 use crate::types::matrices::*;
 use crate::types::mesh::DynamicMesh;
-use crate::types::shader::{Shader, ShaderType};
+use crate::types::shader::{Shader};
 use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
-use crate::ui::uimanager::UiVertexData;
+
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug)]
 #[repr(C)]
@@ -515,7 +515,7 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
     debug!("Triangles {}: {}", material, vertex_count / 3);
 }
 
-fn get_command_buffers(world: &World, assets: &AssetLibrary, state: &mut State, image_id: usize) -> Arc<PrimaryAutoCommandBuffer> {
+fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State, image_id: usize) -> Arc<PrimaryAutoCommandBuffer> {
     let framebuffer = state.renderer.framebuffers.as_ref().unwrap().get(image_id).unwrap();
     let mut builder = AutoCommandBufferBuilder::primary(
         state.renderer.command_buffer_allocator.as_ref().unwrap().as_ref(),
@@ -960,7 +960,7 @@ impl Default for Renderer {
 pub struct RendererHandler {}
 
 impl System for RendererHandler {
-    fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
+    fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {
     }
 
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {

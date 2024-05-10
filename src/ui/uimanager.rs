@@ -1,5 +1,5 @@
-use bytemuck::{Pod, Zeroable};
-use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferInfo}, format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::graphics::vertex_input::Vertex, sync::{now, GpuFuture}};
+
+use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferInfo}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::graphics::vertex_input::Vertex, sync::{now, GpuFuture}};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::Renderer, state::State, types::vectors::Vec2f};
 
@@ -140,7 +140,7 @@ impl UiStorage {
 
         let command_buffer = builder.build().unwrap();
 
-        let future = now(renderer.device.as_ref().unwrap().clone())
+        let _future = now(renderer.device.as_ref().unwrap().clone())
             .then_execute(renderer.queue.as_ref().unwrap().clone(), command_buffer)
             .unwrap()
             .then_signal_fence_and_flush()
