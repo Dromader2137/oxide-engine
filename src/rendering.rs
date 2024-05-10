@@ -45,6 +45,7 @@ use vulkano::swapchain::{
 use vulkano::sync::future::{FenceSignalFuture, JoinFuture};
 use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError, VulkanLibrary};
+use winit::dpi::PhysicalSize;
 use winit::window::WindowBuilder;
 
 use crate::asset_library::AssetLibrary;
@@ -56,7 +57,6 @@ use crate::types::material::Attachment;
 use crate::types::matrices::*;
 use crate::types::mesh::DynamicMesh;
 use crate::types::shader::{Shader, ShaderType};
-use crate::types::static_mesh::StaticMesh;
 use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
 use crate::ui::uimanager::UiVertexData;
@@ -111,7 +111,7 @@ impl Default for EventLoop {
 type Fence = Option<Arc<FenceSignalFuture<PresentFuture<CommandBufferExecFuture<JoinFuture<Box<dyn GpuFuture>, SwapchainAcquireFuture>>>>>>;
 
 #[derive(Clone)]
-pub struct PerMaterialBuffer {
+pub struct DynamicMeshBuffers {
     id_count: u32,
     pub vertex: HashMap<u32, Subbuffer<[VertexData]>>,
     pub vertex_ptr: Option<Subbuffer<[u64]>>,
@@ -119,9 +119,9 @@ pub struct PerMaterialBuffer {
     pub indirect_draw: Option<Subbuffer<[DrawIndirectCommand]>>
 }
 
-impl PerMaterialBuffer {
-    pub fn new() -> PerMaterialBuffer {
-        PerMaterialBuffer {
+impl DynamicMeshBuffers {
+    pub fn new() -> DynamicMeshBuffers {
+        DynamicMeshBuffers {
             id_count: 0,
             vertex: HashMap::new(),
             vertex_ptr: None,
@@ -138,8 +138,10 @@ pub struct Renderer {
     surface: Option<Arc<Surface>>,
     physical_device: Option<Arc<PhysicalDevice>>,
     queue_family_index: Option<u32>,
+    transfer_queue_family_index: Option<u32>,
     pub device: Option<Arc<Device>>,
     pub queue: Option<Arc<Queue>>,
+    pub transfer_queue: Option<Arc<Queue>>,
     pub memeory_allocator: Option<Arc<StandardMemoryAllocator>>,
     pub command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
     pub descriptor_set_allocator: Option<Arc<StandardDescriptorSetAllocator>>,
@@ -152,17 +154,16 @@ pub struct Renderer {
     framebuffers: Option<Vec<Arc<Framebuffer>>>,
     pub viewport: Option<Viewport>,
     pub window_resized: bool,
-    pub command_buffer_outdated: bool,
     pub recreate_swapchain: bool,
     pub frames_in_flight: usize,
     pub fences: Option<Vec<Fence>>,
     pub previous_fence: usize,
     pub pipelines: HashMap<(String, String), Arc<GraphicsPipeline>>,
-    pub per_material_buffers: HashMap<String, PerMaterialBuffer>
+    pub dynamic_mesh_data: HashMap<String, DynamicMeshBuffers>
 }
 
 fn select_physical_device(state: &mut State, device_extensions: &DeviceExtensions, features: &Features) {
-    let (physical_device, queue_family_index) = state
+    let (physical_device, queue_family_index, transfer_queue_family_index) = state
         .renderer
         .instance
         .as_ref()
@@ -172,7 +173,7 @@ fn select_physical_device(state: &mut State, device_extensions: &DeviceExtension
         .filter(|p| p.supported_extensions().contains(device_extensions))
         .filter(|p| p.supported_features().contains(features))
         .filter_map(|p| {
-            p.queue_family_properties()
+            let gq = p.queue_family_properties()
                 .iter()
                 .enumerate()
                 .position(|(i, q)| {
@@ -180,9 +181,25 @@ fn select_physical_device(state: &mut State, device_extensions: &DeviceExtension
                         && p.surface_support(i as u32, &state.renderer.surface.clone().unwrap())
                             .unwrap_or(false)
                 })
-                .map(|q| (p, q as u32))
+                .map(|q| q as u32);
+            let tq = p.queue_family_properties()
+                .iter()
+                .enumerate()
+                .position(|(i, q)| {
+                    debug!("{:?}", q.queue_flags);
+                    q.queue_flags.contains(QueueFlags::TRANSFER) && i as u32 != gq.expect("No graphics queue")
+                })
+                .map(|q| q as u32);
+
+            debug!("{:?} {:?}", gq, tq);
+
+            if gq.is_some() && tq.is_some() {
+                Some((p, gq.unwrap(), tq.unwrap()))
+            } else {
+                None
+            }
         })
-        .min_by_key(|(p, _)| match p.properties().device_type {
+        .min_by_key(|(p, _, _)| match p.properties().device_type {
             PhysicalDeviceType::DiscreteGpu => 0,
             PhysicalDeviceType::IntegratedGpu => 1,
             PhysicalDeviceType::VirtualGpu => 2,
@@ -193,6 +210,7 @@ fn select_physical_device(state: &mut State, device_extensions: &DeviceExtension
 
     state.renderer.physical_device = Some(physical_device);
     state.renderer.queue_family_index = Some(queue_family_index);
+    state.renderer.transfer_queue_family_index = Some(transfer_queue_family_index);
 }
 
 fn get_render_pass(state: &mut State) {
@@ -291,12 +309,6 @@ fn get_framebuffers(state: &mut State) {
 }
 
 pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipeline> {
-    let s_type = match vs.shader_type {
-        ShaderType::Vertex => 0,
-        ShaderType::UiVertex => 1,
-        _ => 0
-    };
-    
     let vs = vs.module.as_ref().unwrap().entry_point("main").unwrap();
     let fs = fs.module.as_ref().unwrap().entry_point("main").unwrap();
 
@@ -351,20 +363,37 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
     ).unwrap()
 }
 
-fn calculate_per_material_buffer(world: &World, state: &mut State, material: &String) {
-    let now = Instant::now();
+fn allocate_dynamic_mesh(mem_alloc: Arc<StandardMemoryAllocator>, mesh: &DynamicMesh) -> Subbuffer<[VertexData]> {
+    Buffer::from_iter(
+        mem_alloc.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+        },
+        mesh.vertices.clone(),
+    ).unwrap()
+}
+
+fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
     let mut query = world.entities.query::<(&mut DynamicMesh, &Transform)>();
-    let filtered_by_material: Vec<_> = query.iter().filter(|x| x.1.0.material == *material).collect();
-    let pmb = match state.renderer.per_material_buffers.get_mut(material) {
+    let mut filtered_by_material: Vec<_> = query.iter().filter(|x| x.1.0.material == *material).collect();
+    let pmb = match state.renderer.dynamic_mesh_data.get_mut(material) {
         Some(val) => val,
         None => {
-            state.renderer.per_material_buffers.insert(material.clone(), PerMaterialBuffer::new());
-            state.renderer.per_material_buffers.get_mut(material).unwrap()
+            state.renderer.dynamic_mesh_data.insert(material.clone(), DynamicMeshBuffers::new());
+            state.renderer.dynamic_mesh_data.get_mut(material).unwrap()
         }
     };
+   
+    let camera_pos = state.renderer.vp_pos;
+    filtered_by_material.sort_by(|a, b| (a.1.1.position - camera_pos).length_sqr().total_cmp(&(b.1.1.position - camera_pos).length_sqr()));
 
-    let loop_now = Instant::now();
-    let mut vertex_offset: u32 = 0;
+    let mut vertex_count: u32 = 0;
     let mut counter: u32 = 0;
     let mut vertex_ptr = Vec::new();
     let mut model = Vec::new();
@@ -392,7 +421,15 @@ fn calculate_per_material_buffer(world: &World, state: &mut State, material: &St
                 );
 
             mesh.buffer_id = Some(pmb.id_count);
+            mesh.changed = false;
             pmb.id_count += 1;
+        } else if mesh.changed {
+            pmb.vertex.insert(
+                pmb.id_count,
+                allocate_dynamic_mesh(state.renderer.memeory_allocator.as_ref().unwrap().clone(), mesh)
+            );
+
+            mesh.changed = false;
         }
 
         vertex_ptr.push(pmb.vertex.get(mesh.buffer_id.as_ref().unwrap()).unwrap().device_address().unwrap().get());
@@ -413,10 +450,9 @@ fn calculate_per_material_buffer(world: &World, state: &mut State, material: &St
             }
         );
 
-        vertex_offset += mesh.vertices.len() as u32;
+        vertex_count += mesh.vertices.len() as u32;
         counter += 1;
     }
-    trace!(" Loop: {}ms", loop_now.elapsed().as_millis());
 
     pmb.model = if model.len() > 0 {
         Some(
@@ -475,7 +511,8 @@ fn calculate_per_material_buffer(world: &World, state: &mut State, material: &St
     } else {
         None
     };
-    trace!("Material mesh generation for {}: {}ms", material, now.elapsed().as_millis());
+
+    debug!("Triangles {}: {}", material, vertex_count / 3);
 }
 
 fn get_command_buffers(world: &World, assets: &AssetLibrary, state: &mut State, image_id: usize) -> Arc<PrimaryAutoCommandBuffer> {
@@ -502,7 +539,7 @@ fn get_command_buffers(world: &World, assets: &AssetLibrary, state: &mut State, 
             },
             ).unwrap();
     
-    for (key, entry) in state.renderer.per_material_buffers.iter() {
+    for (key, entry) in state.renderer.dynamic_mesh_data.iter() {
         if entry.vertex_ptr.is_none() || entry.model.is_none() || entry.indirect_draw.is_none() { continue; }
 
         let material = assets.materials.iter().find(|x| x.name == *key).unwrap();
@@ -621,13 +658,44 @@ fn get_swapchain(state: &mut State) {
     state.renderer.images = Some(images);
 }
 
+fn recreate_pipelines(assets: &AssetLibrary, state: &mut State) {
+    let iter: Vec<(String, String)> =
+        state.renderer.pipelines.keys().cloned().collect();
+    for pipeline in iter.iter() {
+        state.renderer.pipelines.insert(
+            pipeline.clone(),
+            get_pipeline(
+                state,
+                assets
+                .shaders
+                .iter().find(|x| x.name == pipeline.0)
+                .unwrap(),
+                assets
+                .shaders
+                .iter().find(|x| x.name == pipeline.1)
+                .unwrap(),
+            ),
+        );
+    }
+}
+
+fn recalculate_projection(world: &World, state: &mut State, new_dimensions: PhysicalSize<u32>) {
+    let mut camera = world.entities.query::<&Camera>();
+    let camera_data = camera.iter().next().expect("Camera not found").1;
+    state.renderer.vp_data.projection = Matrix4f::perspective(
+        camera_data.vfov.to_radians(),
+        (new_dimensions.width as f32) / (new_dimensions.height as f32),
+        camera_data.near,
+        camera_data.far,
+    );
+}
+
 fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut State) {
     if state.renderer.window_resized || state.renderer.recreate_swapchain {
         state.renderer.recreate_swapchain = false;
         state.renderer.window_resized = false;
 
         let new_dimensions = state.window.window_handle.inner_size();
-
         let (new_swapchain, new_images) = state
             .renderer
             .swapchain
@@ -643,37 +711,10 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
         state.renderer.images = Some(new_images);
         get_framebuffers(state);
 
-        let mut camera = world.entities.query::<&Camera>();
-        let camera_data = camera.iter().next().expect("Camera not found").1;
-        state.renderer.vp_data.projection = Matrix4f::perspective(
-            camera_data.vfov.to_radians(),
-            (new_dimensions.width as f32) / (new_dimensions.height as f32),
-            camera_data.near,
-            camera_data.far,
-        );
-
         state.renderer.viewport.as_mut().unwrap().extent = new_dimensions.into();
-        let iter: Vec<(String, String)> =
-            state.renderer.pipelines.keys().cloned().collect();
-        for pipeline in iter.iter() {
-            state.renderer.pipelines.insert(
-                pipeline.clone(),
-                get_pipeline(
-                    state,
-                    assets
-                        .shaders
-                        .iter().find(|x| x.name == pipeline.0)
-                        .unwrap(),
-                    assets
-                        .shaders
-                        .iter().find(|x| x.name == pipeline.1)
-                        .unwrap(),
-                ),
-            );
-        }
-    }
-    if state.renderer.command_buffer_outdated {
-        state.renderer.command_buffer_outdated = false;
+
+        recalculate_projection(world, state, new_dimensions);
+        recreate_pipelines(assets, state);
     }
 }
 
@@ -698,13 +739,10 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
     }
 
     for mat in assets.materials.iter() {
-        calculate_per_material_buffer(world, state, &mat.name);
+        prepare_dynamic_meshes(world, state, &mat.name);
     }
 
-    let now = Instant::now();
     let command_buffer = get_command_buffers(world, assets, state, image_i as usize);
-    
-    let now = Instant::now();
     if let Some(image_fence) = &state.renderer.fences.as_ref().unwrap()[image_i as usize] {
         image_fence.wait(None).unwrap();
     }
@@ -724,7 +762,6 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
         *contents = state.renderer.vp_data;
     }
 
-    let now = Instant::now();
     let future = previous_future 
         .join(acquire_future)
         .then_execute(
@@ -802,10 +839,16 @@ pub fn init(state: &mut State) {
     let (device, mut queues) = Device::new(
         state.renderer.physical_device.as_ref().unwrap().clone(),
         DeviceCreateInfo {
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index: *state.renderer.queue_family_index.as_ref().unwrap(),
-                ..Default::default()
-            }],
+            queue_create_infos: vec![
+                QueueCreateInfo {
+                    queue_family_index: *state.renderer.queue_family_index.as_ref().unwrap(),
+                    ..Default::default()
+                }, 
+                QueueCreateInfo {
+                    queue_family_index: *state.renderer.transfer_queue_family_index.as_ref().unwrap(),
+                    ..Default::default()
+                }, 
+            ],
             enabled_extensions: DeviceExtensions {
                 khr_swapchain: true,
                 khr_shader_draw_parameters: true,
@@ -818,6 +861,7 @@ pub fn init(state: &mut State) {
     )
     .unwrap();
     state.renderer.queue = Some(queues.next().unwrap());
+    state.renderer.transfer_queue = Some(queues.next().unwrap());
     state.renderer.device = Some(device);
     state.renderer.memeory_allocator = Some(Arc::new(StandardMemoryAllocator::new_default(
         state.renderer.device.as_ref().unwrap().clone(),
@@ -878,8 +922,10 @@ impl Renderer {
             surface: None,
             physical_device: None,
             queue_family_index: None,
+            transfer_queue_family_index: None,
             device: None,
             queue: None,
+            transfer_queue: None,
             memeory_allocator: None,
             command_buffer_allocator: None,
             descriptor_set_allocator: None,
@@ -889,7 +935,6 @@ impl Renderer {
             framebuffers: None,
             viewport: None,
             window_resized: false,
-            command_buffer_outdated: false,
             recreate_swapchain: false,
             frames_in_flight: 0,
             fences: None,
@@ -901,7 +946,7 @@ impl Renderer {
             vp_pos: Vec3d::new([0.0, 0.0, 0.0]),
             vp_buffers: None,
             pipelines: HashMap::new(),
-            per_material_buffers: HashMap::new()
+            dynamic_mesh_data: HashMap::new()
         }
     }
 }

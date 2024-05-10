@@ -16,13 +16,13 @@ use log::trace;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
-use types::mesh::{DynamicMeshLoader, MeshLoader};
+use types::mesh::DynamicMeshLoader;
 use types::shader::ShaderLoader;
 use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
-use ui::uimanager::{UiManager, UiStorage};
+use ui::uimanager::UiStorage;
 use winit::event::DeviceEvent::MouseMotion;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
@@ -50,11 +50,9 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
-    world.add_system(MeshLoader {});
     world.add_system(DynamicMeshLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
-    // world.add_system(UiManager {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 
