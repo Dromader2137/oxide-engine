@@ -18,7 +18,7 @@ where
         let updatable_buffer = UpdatableBuffer::<DataType> { 
             buffer:
                 Buffer::new_sized(
-                    renderer.memeory_allocator.as_ref().unwrap().clone(), 
+                    renderer.memeory_allocator.clone(), 
                     BufferCreateInfo {
                         usage: buffer_usage | BufferUsage::TRANSFER_DST,
                         ..Default::default()

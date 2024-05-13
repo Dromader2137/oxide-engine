@@ -23,7 +23,7 @@ impl Shader {
     pub fn load(&mut self, renderer: &mut Renderer) {
         unsafe {
             self.module = Some(ShaderModule::new(
-                renderer.device.as_ref().unwrap().clone(), 
+                renderer.device.clone(), 
                 ShaderModuleCreateInfo::new(self.source.as_slice())
             ).unwrap());
         }

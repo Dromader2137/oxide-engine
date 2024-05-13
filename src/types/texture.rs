@@ -47,7 +47,7 @@ impl Texture {
         };
 
         self.image = Some(Image::new(
-            renderer.memeory_allocator.as_ref().unwrap().clone(),
+            renderer.memeory_allocator.clone(),
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
                 format: Format::R8G8B8A8_UNORM,
@@ -62,18 +62,18 @@ impl Texture {
         ).unwrap());
         
         let command_buffer_allocator = StandardCommandBufferAllocator::new(
-            renderer.device.as_ref().unwrap().clone(),
+            renderer.device.clone(),
             Default::default(),
         );
 
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
-            renderer.queue.as_ref().unwrap().queue_family_index(),
+            renderer.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         ).unwrap();
 
         let temp_buffer = Buffer::from_iter(
-            renderer.memeory_allocator.as_ref().unwrap().clone(),
+            renderer.memeory_allocator.clone(),
             BufferCreateInfo {
                 usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC,
                 ..Default::default()
@@ -94,8 +94,8 @@ impl Texture {
 
         let command_buffer = builder.build().unwrap();
 
-        let future = now(renderer.device.as_ref().unwrap().clone())
-            .then_execute(renderer.queue.as_ref().unwrap().clone(), command_buffer)
+        let future = now(renderer.device.clone())
+            .then_execute(renderer.queue.clone(), command_buffer)
             .unwrap()
             .then_signal_fence_and_flush()
             .unwrap();
@@ -111,7 +111,7 @@ impl Texture {
 
         self.sampler = Some(
             Sampler::new(
-                renderer.device.as_ref().unwrap().clone(), 
+                renderer.device.clone(), 
                 SamplerCreateInfo::default()
             ).unwrap()
         );

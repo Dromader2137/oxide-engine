@@ -32,10 +32,11 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     env_logger::init();
     let event_loop = EventLoop::new();
     let timer = Instant::now();
+    let window = Window::new(&event_loop);
     let mut state = State {
-        window: Window::new(&event_loop),
+        window: window.clone(),
         input: InputManager::new(),
-        renderer: Renderer::new(),
+        renderer: Renderer::new(&window),
         ui: UiStorage { 
             vertices: Vec::new(),
             indices: Vec::new(),
@@ -45,8 +46,6 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
         time: 0.0,
         delta_time: 0.0
     };
-    
-    rendering::init(&mut state);
     
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});

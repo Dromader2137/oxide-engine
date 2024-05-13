@@ -27,7 +27,7 @@ impl UiStorage {
 
         self.vertex_buffer = Some(
             Buffer::from_iter(
-                renderer.memeory_allocator.as_ref().unwrap().clone(),
+                renderer.memeory_allocator.clone(),
                 BufferCreateInfo {
                     usage: BufferUsage::VERTEX_BUFFER | BufferUsage::TRANSFER_DST,
                     ..Default::default()
@@ -43,7 +43,7 @@ impl UiStorage {
         );
         self.index_buffer = Some(
             Buffer::from_iter(
-                renderer.memeory_allocator.as_ref().unwrap().clone(),
+                renderer.memeory_allocator.clone(),
                 BufferCreateInfo {
                     usage: BufferUsage::INDEX_BUFFER | BufferUsage::TRANSFER_DST,
                     ..Default::default()
@@ -61,20 +61,15 @@ impl UiStorage {
 
     pub fn change_indices(&mut self, renderer: &Renderer, vec: Vec<u32>) {
         self.indices = vec;
-        let command_buffer_allocator = StandardCommandBufferAllocator::new(
-            renderer.device.as_ref().unwrap().clone(),
-            Default::default(),
-        );
-
         if self.indices.is_empty() || self.vertices.is_empty() { return; }        
         let mut builder = AutoCommandBufferBuilder::primary(
-            &command_buffer_allocator,
-            renderer.queue.as_ref().unwrap().queue_family_index(),
+            &renderer.command_buffer_allocator,
+            renderer.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         ).unwrap();
 
         let temp_buffer = Buffer::from_iter(
-            renderer.memeory_allocator.as_ref().unwrap().clone(),
+            renderer.memeory_allocator.clone(),
             BufferCreateInfo {
                 usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC,
                 ..Default::default()
@@ -95,8 +90,8 @@ impl UiStorage {
 
         let command_buffer = builder.build().unwrap();
 
-        let future = now(renderer.device.as_ref().unwrap().clone())
-            .then_execute(renderer.queue.as_ref().unwrap().clone(), command_buffer)
+        let future = now(renderer.device.clone())
+            .then_execute(renderer.queue.clone(), command_buffer)
             .unwrap()
             .then_signal_fence_and_flush()
             .unwrap();
@@ -107,19 +102,19 @@ impl UiStorage {
     pub fn change_vertices(&mut self, renderer: &Renderer, vec: Vec<UiVertexData>) {
         self.vertices = vec;
         let command_buffer_allocator = StandardCommandBufferAllocator::new(
-            renderer.device.as_ref().unwrap().clone(),
+            renderer.device.clone(),
             Default::default(),
         );
 
         if self.indices.is_empty() || self.vertices.is_empty() { return; }        
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
-            renderer.queue.as_ref().unwrap().queue_family_index(),
+            renderer.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         ).unwrap();
 
         let temp_buffer = Buffer::from_iter(
-            renderer.memeory_allocator.as_ref().unwrap().clone(),
+            renderer.memeory_allocator.clone(),
             BufferCreateInfo {
                 usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC,
                 ..Default::default()
@@ -140,8 +135,8 @@ impl UiStorage {
 
         let command_buffer = builder.build().unwrap();
 
-        let _future = now(renderer.device.as_ref().unwrap().clone())
-            .then_execute(renderer.queue.as_ref().unwrap().clone(), command_buffer)
+        let _future = now(renderer.device.clone())
+            .then_execute(renderer.queue.clone(), command_buffer)
             .unwrap()
             .then_signal_fence_and_flush()
             .unwrap();
