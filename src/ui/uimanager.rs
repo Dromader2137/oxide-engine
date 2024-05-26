@@ -148,7 +148,7 @@ impl UiStorage {
 pub struct UiManager {}
 
 impl System for UiManager {
-    fn on_start(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
+    fn on_start(&self, world: &World, _assets: &mut AssetLibrary, _state: &mut State) {
         let mut ui_boxes = world.entities.query::<&UiBox>();
         let mut vertices: Vec<UiVertexData> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
@@ -166,13 +166,9 @@ impl System for UiManager {
             indices.append(&mut vec![ic, ic + 1, ic + 2, ic, ic + 2, ic + 3]);
             ic += 4;
         }
-        
-        state.ui.vertices = vertices;
-        state.ui.indices = indices;
-        state.ui.load(&mut state.renderer);
     }
 
-    fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
+    fn on_update(&self, world: &World, _assets: &mut AssetLibrary, _state: &mut State) {
         let mut ui_boxes = world.entities.query::<&UiBox>();
         let mut vertices: Vec<UiVertexData> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
@@ -190,8 +186,5 @@ impl System for UiManager {
             indices.append(&mut vec![ic, ic + 1, ic + 2, ic, ic + 2, ic + 3]);
             ic += 4;
         }
-
-        state.ui.change_indices(&state.renderer, indices);
-        state.ui.change_vertices(&state.renderer, vertices);
     }
 }

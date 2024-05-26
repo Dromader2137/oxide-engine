@@ -107,8 +107,6 @@ type Fence = Option<Arc<FenceSignalFuture<PresentFuture<CommandBufferExecFuture<
 
 #[derive(Clone)]
 pub struct DynamicMeshBuffers {
-    id_count: u32,
-    pub vertex: HashMap<u32, Subbuffer<[VertexData]>>,
     pub vertex_ptr: Option<Subbuffer<[u64]>>,
     pub model: Option<Subbuffer<[ModelData]>>,
     pub indirect_draw: Option<Subbuffer<[DrawIndirectCommand]>>
@@ -117,8 +115,6 @@ pub struct DynamicMeshBuffers {
 impl DynamicMeshBuffers {
     pub fn new() -> DynamicMeshBuffers {
         DynamicMeshBuffers {
-            id_count: 0,
-            vertex: HashMap::new(),
             vertex_ptr: None,
             indirect_draw: None,
             model: None
@@ -352,22 +348,6 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
     ).unwrap()
 }
 
-fn allocate_dynamic_mesh(mem_alloc: Arc<StandardMemoryAllocator>, mesh: &DynamicMesh) -> Subbuffer<[VertexData]> {
-    Buffer::from_iter(
-        mem_alloc.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-        },
-        mesh.vertices.clone(),
-    ).unwrap()
-}
-
 fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
     let mut query = world.entities.query::<(&mut DynamicMesh, &Transform)>();
     let mut filtered_by_material: Vec<_> = query.iter().filter(|x| x.1.0.material == *material).collect();
@@ -388,52 +368,26 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
     let mut indirect = Vec::new();
 
     for (_, (mesh, transform)) in filtered_by_material {
-        if mesh.vertices.len() == 0 { continue; }
-        if mesh.buffer_id.is_none() {
-            pmb.vertex.insert(
-                pmb.id_count,
-                Buffer::from_iter(
-                    state.renderer.memeory_allocator.clone(),
-                    BufferCreateInfo {
-                        usage: BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo {
-                        memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                            ..Default::default()
-                    },
-                    mesh.vertices.clone(),
-                    )
-                .unwrap(),
-                );
+        if mesh.mesh.is_none() { continue; }
 
-            mesh.buffer_id = Some(pmb.id_count);
-            mesh.changed = false;
-            pmb.id_count += 1;
-        } else if mesh.changed {
-            pmb.vertex.insert(
-                pmb.id_count,
-                allocate_dynamic_mesh(state.renderer.memeory_allocator.clone(), mesh)
-            );
+        let mesh_data = state.meshes.get(mesh.mesh.as_ref().unwrap()).unwrap();
+        if mesh_data.vertices.len() == 0 { continue; }
 
-            mesh.changed = false;
-        }
-
-        vertex_ptr.push(pmb.vertex.get(mesh.buffer_id.as_ref().unwrap()).unwrap().device_address().unwrap().get());
+        vertex_ptr.push(mesh_data.vertex_buffer.device_address().unwrap().get());
 
         model.push(
             ModelData {
-            model: Matrix4f::translation(transform.position.to_vec3f())
+            model: Matrix4f::translation((transform.position - camera_pos).to_vec3f())
                  * Matrix4f::rotation_yxz(transform.rotation)
                  * Matrix4f::scale(transform.scale),
             rotation: Matrix4f::rotation_yxz(transform.rotation),
+            position: (transform.position - camera_pos).to_vec3f()
         });
         indirect.push(
             DrawIndirectCommand {
                 instance_count: 1,
                 first_instance: counter,
-                vertex_count: mesh.vertices.len() as u32,
+                vertex_count: mesh_data.vertices.len() as u32,
                 first_vertex: 0
             }
         );

@@ -19,7 +19,7 @@ impl System for CameraUpdater {
         let cam_rot = Matrix4f::rotation_xzy(transform_data.rotation);
         state.renderer.vp_pos = transform_data.position;
         state.renderer.vp_data.view = Matrix4f::look_at(
-            transform_data.position.to_vec3f(),
+            Vec3f::new([0.0, 0.0, 0.0]),
             cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
             cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
         );

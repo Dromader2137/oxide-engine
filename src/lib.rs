@@ -7,6 +7,7 @@ pub mod types;
 pub mod utility;
 pub mod ui;
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use asset_library::AssetLibrary;
@@ -22,7 +23,6 @@ use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
-use ui::uimanager::UiStorage;
 use winit::event::DeviceEvent::MouseMotion;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
@@ -37,12 +37,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
         window: window.clone(),
         input: InputManager::new(),
         renderer: Renderer::new(&window),
-        ui: UiStorage { 
-            vertices: Vec::new(),
-            indices: Vec::new(),
-            vertex_buffer: None,
-            index_buffer: None
-        },
+        meshes: HashMap::new(),
         time: 0.0,
         delta_time: 0.0
     };
