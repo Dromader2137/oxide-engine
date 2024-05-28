@@ -50,6 +50,7 @@ use crate::asset_library::AssetLibrary;
 use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::camera::Camera;
+use crate::types::material::Attachment;
 use crate::types::matrices::*;
 use crate::types::mesh::DynamicMesh;
 use crate::types::shader::Shader;
@@ -532,12 +533,48 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
             )
             .unwrap();
 
-        builder.bind_descriptor_sets(
-            PipelineBindPoint::Graphics,
-            pipeline.layout().clone(),
-            0,
-            (vp_set, m_set, vertex_set),
-            ).unwrap();
+        let attachment_set = if !material.attachments.is_empty() {
+            Some (
+                PersistentDescriptorSet::new(
+                    state.renderer.descriptor_set_allocator.as_ref(), 
+                    pipeline.layout().set_layouts().get(3).unwrap().clone(), 
+                    material.attachments.iter().enumerate().map(|(id, attachment)| {
+                        if let Attachment::Texture(name) = attachment {
+                            let tex = assets.textures.iter().find(|x| { x.name == *name }).unwrap();
+                        WriteDescriptorSet::image_view_sampler(
+                            id as u32,
+                            tex.image_view.as_ref().unwrap().clone(),
+                            tex.sampler.as_ref().unwrap().clone()
+                        )
+                        } else {
+                            panic!("sfgsfgd");
+                        }
+                    }), 
+                    []
+                ).unwrap()
+            )
+        } else {
+            None
+        };
+
+        match attachment_set.is_none() {
+            true => {
+            builder.bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                pipeline.layout().clone(),
+                0,
+                (vp_set, m_set, vertex_set),
+                ).unwrap();
+            }
+            false => {
+                builder.bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    pipeline.layout().clone(),
+                    0,
+                    (vp_set, m_set, vertex_set, attachment_set.unwrap()),
+                    ).unwrap();
+                }
+        }
 
         builder
             .draw_indirect(

@@ -1,5 +1,7 @@
 use std::{fs::File, sync::Arc, io::{Cursor, Read}};
 
+use log::debug;
+use png::ColorType;
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo}, format::Format, image::{sampler::{Sampler, SamplerCreateInfo}, view::{ImageView, ImageViewCreateInfo}, Image, ImageCreateInfo, ImageType, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, sync::{now, GpuFuture}};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::Renderer, state::State};
@@ -23,7 +25,7 @@ impl Texture {
     }
 
     fn load(&mut self, renderer: &mut Renderer) {
-        let (image_data, image_dimensions) = {
+        let (image_data, image_dimensions, format) = {
             let mut file = File::open(format!("assets/textures/{}.png", self.name))
                 .unwrap();
             let mut png_bytes: Vec<u8> = Vec::new();
@@ -33,6 +35,7 @@ impl Texture {
             let decoder = png::Decoder::new(cursor);
             let mut reader = decoder.read_info().unwrap();
             let info = reader.info().clone();
+            debug!("{:?}", info);
             let mut image_data = Vec::new();
             let depth: u32 = match info.bit_depth {
                 png::BitDepth::One => 1,
@@ -43,14 +46,18 @@ impl Texture {
             };
             image_data.resize((info.width * info.height * depth) as usize, 0);
             reader.next_frame(&mut image_data).unwrap();
-            (image_data, [info.width, info.height, 1])
+            (image_data, [info.width, info.height, 1], info.color_type)
         };
 
         self.image = Some(Image::new(
             renderer.memeory_allocator.clone(),
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
-                format: Format::R8G8B8A8_UNORM,
+                format: match format {
+                    ColorType::Rgba => Format::R8G8B8A8_UNORM,
+                    ColorType::Rgb => Format::R8G8B8_UNORM,
+                    _ => Format::R8_UNORM
+                },
                 extent: image_dimensions,
                 usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
                 ..Default::default()
