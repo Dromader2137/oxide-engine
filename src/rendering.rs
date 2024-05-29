@@ -19,11 +19,11 @@ use vulkano::device::{
 };
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
-use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
+use vulkano::image::{Image, ImageCreateFlags, ImageCreateInfo, ImageFormatInfo, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{AttachmentBlend, ColorBlendAttachmentState, ColorBlendState, ColorComponents};
-use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
+use vulkano::pipeline::graphics::depth_stencil::{CompareOp, DepthState, DepthStencilState, DepthStencilStateFlags};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
@@ -328,7 +328,7 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
             }),
             rasterization_state: Some(RasterizationState::default()),
             depth_stencil_state: Some(DepthStencilState {
-                depth: Some(DepthState::simple()),
+                depth: Some(DepthState { write_enable: true, compare_op: CompareOp::Less }),
                 ..Default::default()
             }),
             multisample_state: Some(MultisampleState {
@@ -788,6 +788,8 @@ impl Renderer {
                 ..Default::default()
             }
         ).unwrap();
+
+
         let surface = Surface::from_window(
             instance.clone(),
             window.window_handle.clone(),
@@ -798,6 +800,8 @@ impl Renderer {
             &extensions,
             &features
         );
+        
+        debug!("{:?} {:?}", instance.api_version(), library);
 
         let (device, mut queues) = Device::new(
             physical_device.clone(),
