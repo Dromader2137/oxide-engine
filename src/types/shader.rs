@@ -47,32 +47,15 @@ impl System for ShaderLoader {
             shader.load(&mut state.renderer);
         }
 
-        let fragment_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::Fragment));
-        let vertex_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::Vertex));
-        
-        for frag in fragment_shaders {
-            for vert in vertex_shaders.clone() {
-                state.renderer.pipelines.insert(
-                    (vert.name.clone(), frag.name.clone()),
-                    get_pipeline(state, vert, frag)
-                );
-            }
-        }
-        
-        let ui_fragment_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::UiFragment));
-        let ui_vertex_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::UiVertex));
-        
-        for frag in ui_fragment_shaders {
-            for vert in ui_vertex_shaders.clone() {
-                state.renderer.pipelines.insert(
-                    (vert.name.clone(), frag.name.clone()),
-                    get_pipeline(state, vert, frag)
-                );
-            }
+        for material in assets.materials.iter() {
+            state.renderer.pipelines.insert(
+                (material.vertex_shader.clone(), material.fragment_shader.clone()),
+                get_pipeline(
+                    state, 
+                    assets.shaders.iter().find(|x| x.name == material.vertex_shader).unwrap(), 
+                    assets.shaders.iter().find(|x| x.name == material.fragment_shader).unwrap()
+                )        
+            );
         }
     }
     fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}

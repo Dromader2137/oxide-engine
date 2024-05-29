@@ -534,25 +534,32 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
             .unwrap();
 
         let attachment_set = if !material.attachments.is_empty() {
-            Some (
-                PersistentDescriptorSet::new(
-                    state.renderer.descriptor_set_allocator.as_ref(), 
-                    pipeline.layout().set_layouts().get(3).unwrap().clone(), 
-                    material.attachments.iter().enumerate().map(|(id, attachment)| {
+            debug!("{:?}", pipeline.layout());
+            Some ({
+                let mut vec = Vec::new();
+                for (id, attachment) in material.attachments.iter().enumerate() {
+                    debug!("{} {:?}", id + 3, pipeline.layout().set_layouts().get(id + 3));
+                vec.push(
+                    PersistentDescriptorSet::new(
+                        state.renderer.descriptor_set_allocator.as_ref(), 
+                        pipeline.layout().set_layouts().get(id + 3).unwrap().clone(), 
+                        [ 
                         if let Attachment::Texture(name) = attachment {
                             let tex = assets.textures.iter().find(|x| { x.name == *name }).unwrap();
+                            debug!("{}", name);
                         WriteDescriptorSet::image_view_sampler(
-                            id as u32,
+                            0,
                             tex.image_view.as_ref().unwrap().clone(),
                             tex.sampler.as_ref().unwrap().clone()
                         )
                         } else {
                             panic!("sfgsfgd");
-                        }
-                    }), 
+                        }],
                     []
-                ).unwrap()
-            )
+                ).unwrap());
+                };
+                vec
+            })
         } else {
             None
         };
@@ -567,13 +574,16 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
                 ).unwrap();
             }
             false => {
-                builder.bind_descriptor_sets(
-                    PipelineBindPoint::Graphics,
-                    pipeline.layout().clone(),
-                    0,
-                    (vp_set, m_set, vertex_set, attachment_set.unwrap()),
+                    let mut sets = vec![vp_set, m_set, vertex_set];
+                    sets.append(&mut attachment_set.unwrap());
+                    debug!("{}", sets.len());
+                    builder.bind_descriptor_sets(
+                        PipelineBindPoint::Graphics,
+                        pipeline.layout().clone(),
+                        0,
+                        sets
                     ).unwrap();
-                }
+            }
         }
 
         builder
