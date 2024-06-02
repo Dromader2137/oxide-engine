@@ -109,6 +109,7 @@ type Fence = Option<Arc<FenceSignalFuture<PresentFuture<CommandBufferExecFuture<
 #[derive(Clone)]
 pub struct DynamicMeshBuffers {
     pub vertex_ptr: Option<Subbuffer<[u64]>>,
+    pub index_ptr: Option<Subbuffer<[u64]>>,
     pub model: Option<Subbuffer<[ModelData]>>,
     pub indirect_draw: Option<Subbuffer<[DrawIndirectCommand]>>
 }
@@ -117,6 +118,7 @@ impl DynamicMeshBuffers {
     pub fn new() -> DynamicMeshBuffers {
         DynamicMeshBuffers {
             vertex_ptr: None,
+            index_ptr: None,
             indirect_draw: None,
             model: None
         }
@@ -365,6 +367,7 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
 
     let mut counter: u32 = 0;
     let mut vertex_ptr = Vec::new();
+    let mut index_ptr = Vec::new();
     let mut model = Vec::new();
     let mut indirect = Vec::new();
 
@@ -375,6 +378,7 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
         if mesh_data.vertices.len() == 0 { continue; }
 
         vertex_ptr.push(mesh_data.vertex_buffer.device_address().unwrap().get());
+        index_ptr.push(mesh_data.index_buffer.device_address().unwrap().get());
 
         model.push(
             ModelData {
@@ -388,14 +392,13 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
             DrawIndirectCommand {
                 instance_count: 1,
                 first_instance: counter,
-                vertex_count: mesh_data.vertices.len() as u32,
+                vertex_count: mesh_data.indices.len() as u32,
                 first_vertex: 0
             }
         );
 
         counter += 1;
     }
-
     pmb.model = if model.len() > 0 {
         Some(
             Buffer::from_iter(
@@ -429,6 +432,25 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
                     ..Default::default()
                 },
                 vertex_ptr,
+            ).unwrap(),
+        )
+    } else {
+        None
+    };
+    pmb.index_ptr = if index_ptr.len() > 0 {
+        Some(
+            Buffer::from_iter(
+                state.renderer.memeory_allocator.clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::STORAGE_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                index_ptr,
             ).unwrap(),
         )
     } else {
@@ -525,10 +547,16 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
         let vertex_set = PersistentDescriptorSet::new(
             state.renderer.descriptor_set_allocator.as_ref(),
             pipeline.layout().set_layouts().get(2).unwrap().clone(),
-            [WriteDescriptorSet::buffer(
+            [
+            WriteDescriptorSet::buffer(
                 0,
                 entry.vertex_ptr.as_ref().unwrap().clone()
-                )],
+            ),
+            WriteDescriptorSet::buffer(
+                1,
+                entry.index_ptr.as_ref().unwrap().clone()
+            ),
+            ],
             [],
             )
             .unwrap();

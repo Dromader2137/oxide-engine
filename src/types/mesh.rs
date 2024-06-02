@@ -4,17 +4,23 @@ use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::Vertex
 
 pub struct Mesh {
     pub vertices: Vec<VertexData>,
-    pub vertex_buffer: Subbuffer<[VertexData]>
+    pub indices: Vec<u32>,
+    pub vertex_buffer: Subbuffer<[VertexData]>,
+    pub index_buffer: Subbuffer<[u32]>
 }
 
 impl Mesh {
-    pub fn new(vertices: Vec<VertexData>, state: &State) -> Mesh {
+    pub fn new(vertices: Vec<VertexData>, indices: Vec<u32>, state: &State) -> Mesh {
         if vertices.len() == 0 {
-            panic!("empty slice not allowed");
+            panic!("Empty vertex list not allowed!");
+        }
+        if indices.len() == 0 {
+            panic!("Empty index list not allowed!");
         }
 
         Mesh {
             vertices: vertices.clone(),
+            indices: indices.clone(),
             vertex_buffer: Buffer::from_iter(
                 state.renderer.memeory_allocator.clone(),
                 BufferCreateInfo {
@@ -27,6 +33,19 @@ impl Mesh {
                     ..Default::default()
                 },
                 vertices
+            ).unwrap(),
+            index_buffer: Buffer::from_iter(
+                state.renderer.memeory_allocator.clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::STORAGE_BUFFER | BufferUsage::SHADER_DEVICE_ADDRESS,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE |
+                        MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                indices
             ).unwrap()
         }
     }
