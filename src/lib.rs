@@ -5,16 +5,19 @@ pub mod rendering;
 pub mod state;
 pub mod types;
 pub mod utility;
+pub mod ui;
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use asset_library::AssetLibrary;
 use ecs::World;
 use input::InputManager;
+use log::trace;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
-use types::mesh::{DynamicMeshLoader, MeshLoader};
+use types::mesh::DynamicMeshLoader;
 use types::shader::ShaderLoader;
 use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
@@ -26,21 +29,21 @@ use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::ControlFlow;
 
 pub fn run(mut world: World, mut assets: AssetLibrary) {
+    env_logger::init();
     let event_loop = EventLoop::new();
     let timer = Instant::now();
+    let window = Window::new(&event_loop);
     let mut state = State {
-        window: Window::new(&event_loop),
+        window: window.clone(),
         input: InputManager::new(),
-        renderer: Renderer::new(),
+        renderer: Renderer::new(&window),
+        meshes: HashMap::new(),
         time: 0.0,
         delta_time: 0.0
     };
     
-    rendering::init(&mut state);
-    
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
-    world.add_system(MeshLoader {});
     world.add_system(DynamicMeshLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
@@ -55,14 +58,14 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                println!("Close requested!");
+                trace!("Close requested!");
                 elwt.exit();
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(_),
                 ..
             } => {
-                println!("Resizing!");
+                trace!("Resizing!");
                 state.renderer.window_resized = true;
             }
             Event::WindowEvent {

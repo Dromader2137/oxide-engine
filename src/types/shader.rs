@@ -7,6 +7,8 @@ use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_p
 pub enum ShaderType {
     Fragment,
     Vertex,
+    UiFragment,
+    UiVertex
 }
 
 #[derive(Debug)]
@@ -21,7 +23,7 @@ impl Shader {
     pub fn load(&mut self, renderer: &mut Renderer) {
         unsafe {
             self.module = Some(ShaderModule::new(
-                renderer.device.as_ref().unwrap().clone(), 
+                renderer.device.clone(), 
                 ShaderModuleCreateInfo::new(self.source.as_slice())
             ).unwrap());
         }
@@ -45,18 +47,15 @@ impl System for ShaderLoader {
             shader.load(&mut state.renderer);
         }
 
-        let fragment_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::Fragment));
-        let vertex_shaders = assets.shaders.iter()
-            .filter(|x| matches!(x.shader_type, ShaderType::Vertex));
-        
-        for frag in fragment_shaders {
-            for vert in vertex_shaders.clone() {
-                state.renderer.pipelines.insert(
-                    (vert.name.clone(), frag.name.clone()),
-                    get_pipeline(state, vert, frag)
-                );
-            }
+        for material in assets.materials.iter() {
+            state.renderer.pipelines.insert(
+                (material.vertex_shader.clone(), material.fragment_shader.clone()),
+                get_pipeline(
+                    state, 
+                    assets.shaders.iter().find(|x| x.name == material.vertex_shader).unwrap(), 
+                    assets.shaders.iter().find(|x| x.name == material.fragment_shader).unwrap()
+                )        
+            );
         }
     }
     fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}

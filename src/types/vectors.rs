@@ -3,17 +3,19 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 use bytemuck::{Pod, Zeroable};
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
-#[repr(C)]
+#[repr(C, align(16))]
 pub struct Vec2f {
     pub x: f32,
     pub y: f32,
+    _align: i64
 }
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
-#[repr(C)]
+#[repr(C, align(16))]
 pub struct Vec3f {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    _align: i32
 }
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -375,6 +377,7 @@ impl Vec2f {
         Vec2f {
             x: val[0],
             y: val[1],
+            _align: 0
         }
     }
 
@@ -382,6 +385,7 @@ impl Vec2f {
         Vec2f {
             x: val.x as f32,
             y: val.y as f32,
+            _align: 0
         }
     }
 
@@ -407,6 +411,7 @@ impl Vec3f {
             x: val[0],
             y: val[1],
             z: val[2],
+            _align: 0
         }
     }
 
@@ -415,6 +420,7 @@ impl Vec3f {
             x: val.x as f32,
             y: val.y as f32,
             z: val.z as f32,
+            _align: 0
         }
     }
 
@@ -435,6 +441,7 @@ impl Vec3f {
             x: (self.y * vec.z) - (self.z * vec.y),
             y: (self.z * vec.x) - (self.x * vec.z),
             z: (self.x * vec.y) - (self.y * vec.x),
+            _align: 0
         }
     }
 
@@ -452,6 +459,7 @@ impl Vec3f {
             x: self.x / len,
             y: self.y / len,
             z: self.z / len,
+            _align: 0
         }
     }
 }
@@ -475,6 +483,7 @@ impl Vec2d {
         Vec2f {
             x: self.x as f32,
             y: self.y as f32,
+            _align: 0
         }
     }
 
@@ -509,6 +518,7 @@ impl Vec3d {
             x: self.x as f32,
             y: self.y as f32,
             z: self.z as f32,
+            _align: 0
         }
     }
 
