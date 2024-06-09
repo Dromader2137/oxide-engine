@@ -9,6 +9,7 @@ winit = { version = "0.29.10", features = ["rwh_05"] }
 bytemuck = "1.14.0"
 image = "0.25.1"
 hecs = "0.10.4"
+tobj = "4.0.2"
 log = "0.4.21"
 env_logger = "0.11.3"
 

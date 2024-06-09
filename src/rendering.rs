@@ -46,13 +46,14 @@ use vulkano::{Validated, VulkanError, VulkanLibrary};
 use winit::dpi::PhysicalSize;
 use winit::window::WindowBuilder;
 
-use crate::asset_library::AssetLibrary;
+use crate::asset_library::{self, AssetLibrary};
 use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::camera::Camera;
 use crate::types::material::Attachment;
 use crate::types::matrices::*;
 use crate::types::mesh::DynamicMesh;
+use crate::types::model::ModelComponent;
 use crate::types::shader::Shader;
 use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
@@ -107,16 +108,16 @@ impl Default for EventLoop {
 type Fence = Option<Arc<FenceSignalFuture<PresentFuture<CommandBufferExecFuture<JoinFuture<Box<dyn GpuFuture>, SwapchainAcquireFuture>>>>>>;
 
 #[derive(Clone)]
-pub struct DynamicMeshBuffers {
+pub struct MeshBuffers {
     pub vertex_ptr: Option<Subbuffer<[u64]>>,
     pub index_ptr: Option<Subbuffer<[u64]>>,
     pub model: Option<Subbuffer<[ModelData]>>,
     pub indirect_draw: Option<Subbuffer<[DrawIndirectCommand]>>
 }
 
-impl DynamicMeshBuffers {
-    pub fn new() -> DynamicMeshBuffers {
-        DynamicMeshBuffers {
+impl MeshBuffers {
+    pub fn new() -> MeshBuffers {
+        MeshBuffers {
             vertex_ptr: None,
             index_ptr: None,
             indirect_draw: None,
@@ -163,7 +164,7 @@ pub struct Renderer {
     pub previous_fence: usize,
 
     pub pipelines: HashMap<(String, String), Arc<GraphicsPipeline>>,
-    pub dynamic_mesh_data: HashMap<String, DynamicMeshBuffers>
+    pub dynamic_mesh_data: HashMap<String, MeshBuffers>
 }
 
 fn select_physical_device(instance: Arc<Instance>, surface: Arc<Surface>, device_extensions: &DeviceExtensions, features: &Features) 
@@ -351,13 +352,13 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
     ).unwrap()
 }
 
-fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
-    let mut query = world.entities.query::<(&mut DynamicMesh, &Transform)>();
-    let mut filtered_by_material: Vec<_> = query.iter().filter(|x| x.1.0.material == *material).collect();
+fn prepare_meshes(world: &World, assets: &AssetLibrary ,state: &mut State, material: &String) {
+    let mut dynamic_query = world.entities.query::<(&mut DynamicMesh, &Transform)>();
+    let mut filtered_by_material: Vec<_> = dynamic_query.iter().filter(|x| x.1.0.material == *material).collect();
     let pmb = match state.renderer.dynamic_mesh_data.get_mut(material) {
         Some(val) => val,
         None => {
-            state.renderer.dynamic_mesh_data.insert(material.clone(), DynamicMeshBuffers::new());
+            state.renderer.dynamic_mesh_data.insert(material.clone(), MeshBuffers::new());
             state.renderer.dynamic_mesh_data.get_mut(material).unwrap()
         }
     };
@@ -399,6 +400,39 @@ fn prepare_dynamic_meshes(world: &World, state: &mut State, material: &String) {
 
         counter += 1;
     }
+
+    for (_, (model_comp, transform)) in world.entities.query::<(&ModelComponent, &Transform)>().iter() {
+        for (mesh_name, _) in assets.models.iter()
+            .find(|x| x.name == model_comp.model_name).unwrap()
+            .meshes_and_materials.iter()
+            .filter(|x| x.1 == *material) {
+                let mesh_data = state.meshes.get(mesh_name).unwrap();
+                if mesh_data.vertices.len() == 0 { continue; }
+
+                vertex_ptr.push(mesh_data.vertex_buffer.device_address().unwrap().get());
+                index_ptr.push(mesh_data.index_buffer.device_address().unwrap().get());
+
+                model.push(
+                    ModelData {
+                        model: Matrix4f::translation((transform.position - camera_pos).to_vec3f())
+                            * Matrix4f::rotation_yxz(transform.rotation)
+                            * Matrix4f::scale(transform.scale),
+                            rotation: Matrix4f::rotation_yxz(transform.rotation),
+                            position: (transform.position - camera_pos).to_vec3f()
+                    });
+                indirect.push(
+                    DrawIndirectCommand {
+                        instance_count: 1,
+                        first_instance: counter,
+                        vertex_count: mesh_data.indices.len() as u32,
+                        first_vertex: 0
+                }
+                );
+
+                counter += 1;
+        }
+    }
+
     pmb.model = if model.len() > 0 {
         Some(
             Buffer::from_iter(
@@ -483,7 +517,7 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
         state.renderer.command_buffer_allocator.as_ref(),
         state.renderer.queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit,
-        ).unwrap();
+    ).unwrap();
     
     builder
         .begin_render_pass(
@@ -499,7 +533,7 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
                 contents: SubpassContents::Inline,
                 ..Default::default()
             },
-            ).unwrap();
+        ).unwrap();
     
     for (key, entry) in state.renderer.dynamic_mesh_data.iter() {
         if entry.vertex_ptr.is_none() || entry.model.is_none() || entry.indirect_draw.is_none() { continue; }
@@ -520,97 +554,83 @@ fn get_command_buffers(_world: &World, assets: &AssetLibrary, state: &mut State,
         let vp_set = PersistentDescriptorSet::new(
             state.renderer.descriptor_set_allocator.as_ref(),
             pipeline.layout().set_layouts().first().unwrap().clone(),
-            [WriteDescriptorSet::buffer(
-                0,
-                state
-                .renderer
-                .vp_buffers
-                .get(image_id)
-                .unwrap()
-                .clone()
-                )],
+            [
+                WriteDescriptorSet::buffer(
+                    0,
+                    state.renderer.vp_buffers.get(image_id).unwrap().clone()
+                )
+            ],
             [],
-            )
-            .unwrap();
+        ).unwrap();
 
         let m_set = PersistentDescriptorSet::new(
             state.renderer.descriptor_set_allocator.as_ref(),
             pipeline.layout().set_layouts().get(1).unwrap().clone(),
-            [WriteDescriptorSet::buffer(
-                0,
-                entry.model.as_ref().unwrap().clone()
-                )],
+            [
+                WriteDescriptorSet::buffer(
+                    0,
+                    entry.model.as_ref().unwrap().clone()
+                )
+            ],
             [],
-            )
-            .unwrap();
+        ).unwrap();
         
         let vertex_set = PersistentDescriptorSet::new(
             state.renderer.descriptor_set_allocator.as_ref(),
             pipeline.layout().set_layouts().get(2).unwrap().clone(),
             [
-            WriteDescriptorSet::buffer(
-                0,
-                entry.vertex_ptr.as_ref().unwrap().clone()
-            ),
-            WriteDescriptorSet::buffer(
-                1,
-                entry.index_ptr.as_ref().unwrap().clone()
-            ),
+                WriteDescriptorSet::buffer(
+                    0,
+                    entry.vertex_ptr.as_ref().unwrap().clone()
+                ),
+                WriteDescriptorSet::buffer(
+                    1,
+                    entry.index_ptr.as_ref().unwrap().clone()
+                ),
             ],
             [],
-            )
-            .unwrap();
+        ).unwrap();
 
         let attachment_set = if !material.attachments.is_empty() {
-            debug!("{:?}", pipeline.layout());
             Some ({
-                let mut vec = Vec::new();
-                for (id, attachment) in material.attachments.iter().enumerate() {
-                    debug!("{} {:?}", id + 3, pipeline.layout().set_layouts().get(id + 3));
-                vec.push(
-                    PersistentDescriptorSet::new(
-                        state.renderer.descriptor_set_allocator.as_ref(), 
-                        pipeline.layout().set_layouts().get(id + 3).unwrap().clone(), 
-                        [ 
-                        if let Attachment::Texture(name) = attachment {
-                            let tex = assets.textures.iter().find(|x| { x.name == *name }).unwrap();
-                            debug!("{}", name);
-                        WriteDescriptorSet::image_view_sampler(
-                            0,
-                            tex.image_view.as_ref().unwrap().clone(),
-                            tex.sampler.as_ref().unwrap().clone()
-                        )
-                        } else {
-                            panic!("sfgsfgd");
-                        }],
+                PersistentDescriptorSet::new(
+                    state.renderer.descriptor_set_allocator.as_ref(), 
+                    pipeline.layout().set_layouts().get(3).unwrap().clone(), 
+                    material.attachments.iter().enumerate().map(|(id, attachment)| {
+                        match attachment {
+                            Attachment::Texture(name) => {
+                                let tex = assets.textures.iter().find(|x| { x.name == *name }).unwrap();
+                                WriteDescriptorSet::image_view_sampler(
+                                    id as u32,
+                                    tex.image_view.as_ref().unwrap().clone(),
+                                    tex.sampler.as_ref().unwrap().clone()
+                                )
+                            }
+                        }
+                    }).collect::<Vec<_>>(),
                     []
-                ).unwrap());
-                };
-                vec
+                ).unwrap()
             })
         } else {
             None
         };
 
-        match attachment_set.is_none() {
-            true => {
-            builder.bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                pipeline.layout().clone(),
-                0,
-                (vp_set, m_set, vertex_set),
+        match attachment_set {
+            None => {
+                builder.bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    pipeline.layout().clone(),
+                    0,
+                    (vp_set, m_set, vertex_set),
                 ).unwrap();
             }
-            false => {
-                    let mut sets = vec![vp_set, m_set, vertex_set];
-                    sets.append(&mut attachment_set.unwrap());
-                    debug!("{}", sets.len());
-                    builder.bind_descriptor_sets(
-                        PipelineBindPoint::Graphics,
-                        pipeline.layout().clone(),
-                        0,
-                        sets
-                    ).unwrap();
+            Some(set) => {
+                builder.bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    pipeline.layout().clone(),
+                    0,
+                    (vp_set, m_set, vertex_set, set),
+                ).unwrap();
             }
         }
 
@@ -736,7 +756,7 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
     }
 
     for mat in assets.materials.iter() {
-        prepare_dynamic_meshes(world, state, &mat.name);
+        prepare_meshes(world, assets, state, &mat.name);
     }
 
     let command_buffer = get_command_buffers(world, assets, state, image_i as usize);
@@ -829,7 +849,7 @@ impl Renderer {
             &features
         );
         
-        debug!("{:?} {:?}", instance.api_version(), library);
+        debug!("Vulkan version: {}", instance.api_version());
 
         let (device, mut queues) = Device::new(
             physical_device.clone(),

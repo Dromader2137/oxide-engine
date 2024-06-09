@@ -5,7 +5,6 @@ pub mod rendering;
 pub mod state;
 pub mod types;
 pub mod utility;
-pub mod ui;
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -17,7 +16,7 @@ use log::trace;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
-use types::mesh::DynamicMeshLoader;
+use types::mesh::MeshLoader;
 use types::shader::ShaderLoader;
 use types::texture::TextureLoader;
 use types::transform::TransformUpdater;
@@ -44,9 +43,9 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
-    world.add_system(DynamicMeshLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
+    world.add_system(MeshLoader {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 

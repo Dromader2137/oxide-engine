@@ -2,8 +2,6 @@ use super::vectors::Vec3f;
 
 #[derive(Debug)]
 pub enum Attachment {
-    Integer(i32),
-    Color(Vec3f),
     Texture(String)
 }
 
