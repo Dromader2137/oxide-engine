@@ -1,6 +1,5 @@
 use bytemuck::{Pod, Zeroable};
 
-
 use crate::{
     asset_library::AssetLibrary,
     ecs::{System, World},
@@ -8,7 +7,7 @@ use crate::{
     types::vectors::*,
 };
 
-use super::{matrices::Matrix4f};
+use super::matrices::Matrix4f;
 
 #[derive(Clone)]
 pub struct Transform {
@@ -21,9 +20,9 @@ pub struct Transform {
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod, Debug)]
 pub struct ModelData {
-    pub model: Matrix4f,
+    pub translation: Matrix4f,
     pub rotation: Matrix4f,
-    pub position: Vec3f
+    pub scale: Matrix4f,
 }
 
 impl Transform {
