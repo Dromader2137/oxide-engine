@@ -1,7 +1,7 @@
-use std::{fs::File, sync::Arc, io::{Cursor, Read}};
+use std::{sync::Arc};
 
 use image::io::Reader;
-use log::debug;
+
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo}, format::Format, image::{sampler::{Sampler, SamplerCreateInfo}, view::{ImageView, ImageViewCreateInfo}, Image, ImageCreateInfo, ImageType, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, sync::{now, GpuFuture}};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::Renderer, state::State};

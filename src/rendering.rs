@@ -19,11 +19,11 @@ use vulkano::device::{
 };
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
-use vulkano::image::{Image, ImageCreateFlags, ImageCreateInfo, ImageFormatInfo, ImageType, ImageUsage, SampleCount};
+use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{AttachmentBlend, ColorBlendAttachmentState, ColorBlendState, ColorComponents};
-use vulkano::pipeline::graphics::depth_stencil::{CompareOp, DepthState, DepthStencilState, DepthStencilStateFlags};
+use vulkano::pipeline::graphics::depth_stencil::{CompareOp, DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
@@ -46,7 +46,7 @@ use vulkano::{Validated, VulkanError, VulkanLibrary};
 use winit::dpi::PhysicalSize;
 use winit::window::WindowBuilder;
 
-use crate::asset_library::{self, AssetLibrary};
+use crate::asset_library::{AssetLibrary};
 use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::camera::Camera;

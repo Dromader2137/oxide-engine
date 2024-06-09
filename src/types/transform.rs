@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use vulkano::buffer::BufferUsage;
+
 
 use crate::{
     asset_library::AssetLibrary,
@@ -8,7 +8,7 @@ use crate::{
     types::vectors::*,
 };
 
-use super::{buffers::UpdatableBuffer, matrices::Matrix4f};
+use super::{matrices::Matrix4f};
 
 #[derive(Clone)]
 pub struct Transform {
@@ -40,7 +40,7 @@ impl Transform {
 pub struct TransformUpdater {}
 
 impl System for TransformUpdater {
-    fn on_start(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {}
+    fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
 
-    fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {}
+    fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
 }
