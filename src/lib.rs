@@ -16,6 +16,7 @@ use log::trace;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
+use types::material::MaterialLoader;
 use types::mesh::MeshLoader;
 use types::shader::ShaderLoader;
 use types::texture::TextureLoader;
@@ -46,6 +47,7 @@ pub fn run(mut world: World, mut assets: AssetLibrary) {
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
     world.add_system(MeshLoader {});
+    world.add_system(MaterialLoader {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 

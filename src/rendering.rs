@@ -663,28 +663,47 @@ fn get_command_buffers(
             None
         };
 
-        match attachment_set {
-            Some(set) => {
-                builder
-                    .bind_descriptor_sets(
-                        PipelineBindPoint::Graphics,
-                        pipeline.layout().clone(),
-                        0,
-                        (vp_set, m_set, vertex_set, set),
-                    )
-                    .unwrap();
-            }
-            None => {
-                builder
-                    .bind_descriptor_sets(
-                        PipelineBindPoint::Graphics,
-                        pipeline.layout().clone(),
-                        0,
-                        (vp_set, m_set, vertex_set),
-                    )
-                    .unwrap();
-            }
+        let material_set = if material.parameter_buffer.is_some() {
+                Some(
+                    PersistentDescriptorSet::new(
+                        state.renderer.descriptor_set_allocator.as_ref(),
+                        pipeline.layout().set_layouts().get({
+                            if attachment_set.is_some() {
+                                4
+                            } else {
+                                3
+                            }
+                        }).unwrap().clone(),
+                        [
+                            WriteDescriptorSet::buffer(
+                                0,
+                                material.parameter_buffer.as_ref().unwrap().clone(),
+                            )
+                        ],
+                        [],
+                    ).unwrap()
+                )
+        } else {
+                None
+        };
+
+
+        let mut sets = vec![vp_set, m_set, vertex_set];
+        if attachment_set.is_some() {
+            sets.push(attachment_set.unwrap());
         }
+        if material_set.is_some() {
+            sets.push(material_set.unwrap())
+        }
+
+        builder
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                pipeline.layout().clone(),
+                0,
+                sets
+            )
+            .unwrap();
 
         builder
             .draw_indirect(entry.indirect_draw.as_ref().unwrap().clone())

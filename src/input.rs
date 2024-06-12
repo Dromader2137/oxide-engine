@@ -20,14 +20,20 @@ pub struct InputManager {
 }
 
 impl InputManager {
-    pub fn process_key_press(&mut self, key_code: Key) {
+    pub fn process_key_press(&mut self, mut key_code: Key) {
+        if let Key::Character(key) = key_code {
+            key_code = Key::Character(key.to_lowercase().into());
+        }
         let already_there = self.down.insert(key_code.clone());
         if already_there {
             self.pressed.insert(key_code);
         }
     }
 
-    pub fn process_key_release(&mut self, key_code: Key) {
+    pub fn process_key_release(&mut self, mut key_code: Key) {
+        if let Key::Character(key) = key_code {
+            key_code = Key::Character(key.to_lowercase().into());
+        }
         self.down.remove(&key_code);
         self.released.insert(key_code);
     }
