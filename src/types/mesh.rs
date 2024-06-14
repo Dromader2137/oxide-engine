@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use log::{debug, error};
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
 
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::VertexData, state::State, types::vectors::{Vec2f, Vec3f}};
+use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::VertexData, state::State, types::vectors::{Vec2f, Vec3f}, types::texture::Texture};
+
+use super::material::{Attachment, Material, MaterialParameters};
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
@@ -89,6 +91,43 @@ impl System for MeshLoader {
                 }
             };
 
+            for material in materials.iter() {
+                let name = format!("{}{}", mesh_name, material.name);
+                if assets.materials.iter().find(|x| x.name == name).is_some() { continue; }
+
+                assets.materials.push(
+                    Material::new(
+                        &name,
+                        "perspective",
+                        "lit",
+                        vec![
+                            {
+                                match &material.diffuse_texture {
+                                    Some(val) => {
+                                        let name = format!("{}/{}", mesh_name, val);
+                                        let name = name.replace('\\', "/");
+                                        debug!("{}", name);
+                                        assets.textures.push(Texture::new(name.clone()));
+                                        Attachment::Texture(name.clone())
+                                    }
+                                    None => Attachment::Texture("default".to_string())
+                                }
+                            }
+                        ],
+                        Some(MaterialParameters {
+                            diffuse_color: match material.diffuse {
+                                Some(col) => Vec3f::new(col),
+                                None => Vec3f::new([0.0, 0.0, 0.0])
+                            },
+                            roughness: match material.shininess {
+                                Some(val) => 1.0 - val,
+                                None => 1.0
+                            }
+                        })
+                    )
+                );
+            }
+
             let mut used_names: HashSet<String> = HashSet::new();
             for (id, mesh) in meshes.iter().enumerate() {
                 let mat = match mesh.mesh.material_id {
@@ -115,6 +154,7 @@ impl System for MeshLoader {
                 let pos = &mesh.mesh.positions;
                 let nor = &mesh.mesh.normals;
                 let uvs = &mesh.mesh.texcoords;
+                debug!("{} {} {}", pos.len(), nor.len(), uvs.len());
 
                 let mut vertices: Vec<VertexData> = Vec::new(); 
                 for i in 0..pos.len()/3 {

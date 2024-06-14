@@ -235,7 +235,7 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
         attachments: {
             inter: {
                 format: swapchain.image_format(),
-                samples: 8,
+                samples: SampleCount::Sample2,
                 load_op: Clear,
                 store_op: Store,
             },
@@ -247,7 +247,7 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
             },
             depth: {
                 format: Format::D32_SFLOAT,
-                samples: 8,
+                samples: SampleCount::Sample2,
                 load_op: Clear,
                 store_op: DontCare,
             }
@@ -276,7 +276,7 @@ fn get_framebuffers(
                 format: Format::D32_SFLOAT,
                 extent: images[0].extent(),
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
-                samples: SampleCount::Sample8,
+                samples: SampleCount::Sample2,
                 ..Default::default()
             },
             AllocationCreateInfo::default(),
@@ -297,7 +297,7 @@ fn get_framebuffers(
                         format: image.format(),
                         extent: image.extent(),
                         usage: ImageUsage::COLOR_ATTACHMENT,
-                        samples: SampleCount::Sample8,
+                        samples: SampleCount::Sample2,
                         ..Default::default()
                     },
                     AllocationCreateInfo::default(),
@@ -357,7 +357,7 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
                 ..Default::default()
             }),
             multisample_state: Some(MultisampleState {
-                rasterization_samples: SampleCount::Sample8,
+                rasterization_samples: SampleCount::Sample2,
                 ..Default::default()
             }),
             color_blend_state: Some(ColorBlendState::with_attachment_states(

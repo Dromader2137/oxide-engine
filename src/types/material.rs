@@ -30,7 +30,7 @@ pub struct Material {
 
 impl Material {
     pub fn new(
-        name: &'static str,
+        name: &str,
         vertex_shader: &'static str,
         fragment_shader: &'static str,
         attachments: Vec<Attachment>,
