@@ -6,7 +6,7 @@ pub mod state;
 pub mod types;
 pub mod utility;
 
-use std::collections::HashMap;
+use std::fs;
 use std::time::Instant;
 
 use asset_library::AssetLibrary;
@@ -17,7 +17,7 @@ use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
 use types::material::MaterialLoader;
-use types::mesh::MeshLoader;
+use types::mesh::MeshBufferLoader;
 use types::shader::ShaderLoader;
 use types::texture::{DefaultTextureLoader, TextureLoader};
 use types::transform::TransformUpdater;
@@ -30,25 +30,33 @@ use winit::event_loop::ControlFlow;
 
 pub fn run(mut world: World, mut assets: AssetLibrary) {
     env_logger::init();
-    let event_loop = EventLoop::new();
     let timer = Instant::now();
+    
+    if cfg!(feature = "dev_tools") {
+        log::debug!("Recreating asset pack...");
+        types::mesh::load_model_meshes(&mut assets);
+        let _ = std::fs::write("assets.data", rmp_serde::to_vec(&assets).unwrap());
+    } else {
+        assets = rmp_serde::from_slice(fs::read("assets.data").unwrap().as_slice()).unwrap();
+    }
+        
+    let event_loop = EventLoop::new();
     let window = Window::new(&event_loop);
     let mut state = State {
         window: window.clone(),
         input: InputManager::new(),
         renderer: Renderer::new(&window),
-        meshes: HashMap::new(),
         time: 0.0,
         delta_time: 0.0
     };
-    
+
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
-    world.add_system(MeshLoader {});
     world.add_system(MaterialLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
     world.add_system(DefaultTextureLoader {});
+    world.add_system(MeshBufferLoader {});
     world.add_system(RendererHandler {});
     world.start(&mut assets, &mut state);
 

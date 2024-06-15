@@ -1,30 +1,34 @@
 use std::fmt::Debug;
 
+use serde::{Deserialize, Serialize};
 use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, state::State};
 
 use super::vectors::Vec3f;
 
-#[derive(BufferContents, Debug, Clone)]
+#[derive(BufferContents, Debug, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct MaterialParameters {
     pub diffuse_color: Vec3f,
-    pub roughness: f32
+    pub roughness: f32,
+    pub use_roughness_texture: u8,
+    pub use_diffuse_texture: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Attachment {
     Texture(String)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Material {
     pub name: String,
     pub vertex_shader: String,
     pub fragment_shader: String,
     pub attachments: Vec<Attachment>,
     pub parameters: Option<MaterialParameters>,
+    #[serde(skip)]
     pub parameter_buffer: Option<Subbuffer<MaterialParameters>>
 }
 

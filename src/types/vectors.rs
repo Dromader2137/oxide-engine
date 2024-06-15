@@ -1,15 +1,16 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use bytemuck::{Pod, Zeroable};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
 #[repr(C, align(16))]
 pub struct Vec2f {
     pub x: f32,
     pub y: f32,
     _align: i64
 }
-#[derive(Clone, Copy, Pod, Zeroable, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
 #[repr(C, align(16))]
 pub struct Vec3f {
     pub x: f32,
@@ -18,13 +19,13 @@ pub struct Vec3f {
     _align: i32
 }
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Vec2d {
     pub x: f64,
     pub y: f64,
 }
-#[derive(Clone, Copy, Pod, Zeroable, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Vec3d {
     pub x: f64,

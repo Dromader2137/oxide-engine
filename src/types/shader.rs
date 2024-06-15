@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_pipeline, Renderer}, state::State, utility::read_file_to_words};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ShaderType {
     Fragment,
     Vertex,
@@ -11,11 +12,12 @@ pub enum ShaderType {
     UiVertex
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Shader {
     pub name: String,
     pub shader_type: ShaderType,
     pub source: Vec<u32>,
+    #[serde(skip)]
     pub module: Option<Arc<ShaderModule>>,
 }
 

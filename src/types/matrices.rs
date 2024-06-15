@@ -1,10 +1,11 @@
 use std::ops::Mul;
 
 use bytemuck::{Pod, Zeroable};
+use serde::{Deserialize, Serialize};
 
 use crate::types::vectors::*;
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Matrix4f([[f32; 4]; 4]);
 

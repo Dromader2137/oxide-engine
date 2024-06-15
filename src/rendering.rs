@@ -6,6 +6,7 @@ use bytemuck::{Pod, Zeroable};
 
 use log::{debug, error};
 
+use serde::{Deserialize, Serialize};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
@@ -63,7 +64,7 @@ use crate::types::shader::Shader;
 use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
 
-#[derive(Pod, Zeroable, Clone, Copy, Debug)]
+#[derive(Pod, Zeroable, Clone, Copy, Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct VertexData {
     pub position: Vec3f,
@@ -410,13 +411,13 @@ fn prepare_meshes(world: &World, assets: &AssetLibrary, state: &mut State, mater
             continue;
         }
 
-        let mesh_data = state.meshes.get(mesh.mesh.as_ref().unwrap()).unwrap();
+        let mesh_data = assets.meshes.iter().find(|x| x.name == *mesh.mesh.as_ref().unwrap()).expect("Mesh not found");
         if mesh_data.vertices.len() == 0 {
             continue;
         }
 
-        vertex_ptr.push(mesh_data.vertex_buffer.device_address().unwrap().get());
-        index_ptr.push(mesh_data.index_buffer.device_address().unwrap().get());
+        vertex_ptr.push(mesh_data.vertex_buffer.as_ref().unwrap().device_address().unwrap().get());
+        index_ptr.push(mesh_data.index_buffer.as_ref().unwrap().device_address().unwrap().get());
 
         model.push(ModelData {
             translation: Matrix4f::translation((transform.position - camera_pos).to_vec3f()),
@@ -447,13 +448,13 @@ fn prepare_meshes(world: &World, assets: &AssetLibrary, state: &mut State, mater
             .iter()
             .filter(|x| x.1 == *material)
         {
-            let mesh_data = state.meshes.get(mesh_name).unwrap();
+            let mesh_data = assets.meshes.iter().find(|x| x.name == *mesh_name).expect("Mesh not found");
             if mesh_data.vertices.len() == 0 {
                 continue;
             }
 
-            vertex_ptr.push(mesh_data.vertex_buffer.device_address().unwrap().get());
-            index_ptr.push(mesh_data.index_buffer.device_address().unwrap().get());
+            vertex_ptr.push(mesh_data.vertex_buffer.as_ref().unwrap().device_address().unwrap().get());
+            index_ptr.push(mesh_data.index_buffer.as_ref().unwrap().device_address().unwrap().get());
 
             model.push(ModelData {
                 translation: Matrix4f::translation((transform.position - camera_pos).to_vec3f()),

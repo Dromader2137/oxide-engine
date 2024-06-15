@@ -1,24 +1,37 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use image::{io::Reader, RgbaImage};
 
 use log::debug;
+use serde::{Deserialize, Serialize};
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo}, format::Format, image::{sampler::{Sampler, SamplerCreateInfo}, view::{ImageView, ImageViewCreateInfo}, Image, ImageCreateInfo, ImageType, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, sync::{now, GpuFuture}};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::Renderer, state::State};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Texture {
     pub name: String,
+    pub image_data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    #[serde(skip)]
     pub image: Option<Arc<Image>>,
+    #[serde(skip)]
     pub image_view: Option<Arc<ImageView>>,
+    #[serde(skip)]
     pub sampler: Option<Arc<Sampler>>
 }
 
 impl Texture {
     pub fn new(name: String) -> Texture {
+        let image = Reader::open(format!("assets/textures/{}", name)).unwrap().with_guessed_format().unwrap()
+            .decode().unwrap().to_rgba8();
+
         Texture { 
-            name, 
+            name: name.clone(),
+            image_data: image.to_vec(),
+            width: image.width(),
+            height: image.height(),
             image: None,
             image_view: None, 
             sampler: None
@@ -27,14 +40,15 @@ impl Texture {
 
     fn load(&mut self, renderer: &mut Renderer) {
         debug!("{}", self.name);
-        let img = Reader::open(format!("assets/textures/{}", self.name)).unwrap().decode().unwrap().into_rgba8();
+
+        let img = RgbaImage::from_vec(self.width, self.height, self.image_data.clone()).unwrap();
 
         self.image = Some(Image::new(
             renderer.memeory_allocator.clone(),
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
                 format: Format::R8G8B8A8_UNORM,
-                extent: [img.width(), img.height(), 1],
+                extent: [self.width, self.height, 1],
                 usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
                 ..Default::default()
             },
@@ -189,6 +203,9 @@ fn default_texture(renderer: &Renderer) -> Texture {
 
     Texture {
         name: "default".to_string(),
+        image_data: vec![],
+        width: 1,
+        height: 1,
         image,
         image_view,
         sampler
