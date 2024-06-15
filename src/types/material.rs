@@ -34,9 +34,9 @@ pub struct Material {
 
 impl Material {
     pub fn new(
-        name: &str,
-        vertex_shader: &'static str,
-        fragment_shader: &'static str,
+        name: String,
+        vertex_shader: String,
+        fragment_shader: String,
         attachments: Vec<Attachment>,
         parameters: Option<MaterialParameters>
     ) -> Material {

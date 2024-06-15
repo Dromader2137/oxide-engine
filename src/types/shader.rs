@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_pipeline, Renderer}, state::State, utility::read_file_to_words};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ShaderType {
     Fragment,
     Vertex,

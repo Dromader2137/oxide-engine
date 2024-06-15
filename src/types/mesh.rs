@@ -120,9 +120,9 @@ pub fn load_model_meshes(assets: &mut AssetLibrary) {
 
             assets.materials.push(
                 Material::new(
-                    &name,
-                    "perspective",
-                    "lit",
+                    name.clone(),
+                    "perspective".to_string(),
+                    "lit".to_string(),
                     vec![
             {
                 match &material.diffuse_texture {

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use image::{io::Reader, RgbaImage};
 
-use log::debug;
 use serde::{Deserialize, Serialize};
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo}, format::Format, image::{sampler::{Sampler, SamplerCreateInfo}, view::{ImageView, ImageViewCreateInfo}, Image, ImageCreateInfo, ImageType, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, sync::{now, GpuFuture}};
 
@@ -39,8 +38,6 @@ impl Texture {
     }
 
     fn load(&mut self, renderer: &mut Renderer) {
-        debug!("{}", self.name);
-
         let img = RgbaImage::from_vec(self.width, self.height, self.image_data.clone()).unwrap();
 
         self.image = Some(Image::new(

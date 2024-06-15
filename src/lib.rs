@@ -5,11 +5,12 @@ pub mod rendering;
 pub mod state;
 pub mod types;
 pub mod utility;
+pub mod asset_descriptions;
 
 use std::fs;
 use std::time::Instant;
 
-use asset_library::AssetLibrary;
+use asset_descriptions::AssetDescriptions;
 use ecs::World;
 use input::InputManager;
 use log::trace;
@@ -28,17 +29,20 @@ use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-pub fn run(mut world: World, mut assets: AssetLibrary) {
+pub fn run(mut world: World) {
     env_logger::init();
     let timer = Instant::now();
-    
-    if cfg!(feature = "dev_tools") {
+
+    let mut assets = if cfg!(feature = "dev_tools") {
+        let asset_descriptions: AssetDescriptions = ron::from_str(fs::read_to_string("assets.ron").unwrap().as_str()).unwrap();
         log::debug!("Recreating asset pack...");
+        let mut assets = asset_descriptions.generate_library();
         types::mesh::load_model_meshes(&mut assets);
         let _ = std::fs::write("assets.data", rmp_serde::to_vec(&assets).unwrap());
+        assets
     } else {
-        assets = rmp_serde::from_slice(fs::read("assets.data").unwrap().as_slice()).unwrap();
-    }
+        rmp_serde::from_slice(fs::read("assets.data").unwrap().as_slice()).unwrap()
+    };
         
     let event_loop = EventLoop::new();
     let window = Window::new(&event_loop);
