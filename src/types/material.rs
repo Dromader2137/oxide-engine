@@ -11,9 +11,8 @@ use super::vectors::Vec3f;
 #[repr(C)]
 pub struct MaterialParameters {
     pub diffuse_color: Vec3f,
-    pub roughness: f32,
-    pub use_roughness_texture: u8,
     pub use_diffuse_texture: u8,
+    pub use_normal_texture: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

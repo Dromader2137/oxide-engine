@@ -6,6 +6,7 @@ pub mod state;
 pub mod types;
 pub mod utility;
 pub mod asset_descriptions;
+pub mod loaders;
 
 use std::fs;
 use std::time::Instant;
@@ -29,12 +30,11 @@ use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-pub fn run(mut world: World) {
+pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
     env_logger::init();
     let timer = Instant::now();
 
     let mut assets = if cfg!(feature = "dev_tools") {
-        let asset_descriptions: AssetDescriptions = ron::from_str(fs::read_to_string("assets.ron").unwrap().as_str()).unwrap();
         log::debug!("Recreating asset pack...");
         let mut assets = asset_descriptions.generate_library();
         types::mesh::load_model_meshes(&mut assets);

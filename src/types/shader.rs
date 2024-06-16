@@ -35,7 +35,7 @@ impl Shader {
         Shader {
             name: name.clone(),
             shader_type,
-            source: read_file_to_words(format!("shaders/bin/{}.spv", name).as_str()),
+            source: read_file_to_words(format!("assets/shaders/bin/{}.spv", name).as_str()),
             module: None
         }
     }
