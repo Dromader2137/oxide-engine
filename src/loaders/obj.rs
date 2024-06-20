@@ -114,7 +114,7 @@ pub fn load_obj(
                 };
 
                 let uv = if uvs.get(2*i+1).is_some() {
-                    Vec2f::new([uvs[2*i], uvs[2*i+1]])
+                    Vec2f::new([uvs[2*i], -uvs[2*i+1]])
                 } else {
                     Vec2f::new([0.0, 1.0])
                 };
@@ -123,7 +123,8 @@ pub fn load_obj(
                     VertexData {
                         position: Vec3f::new([pos[3*i],pos[3*i+1],pos[3*i+2]]),
                         normal,
-                        uv              
+                        uv,
+                        tangent: Vec3f::new([0.0, 1.0, 0.0])
                 }
                 );
             }

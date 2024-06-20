@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
-use log::error;
+use log::{debug, error};
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, loaders::{gltf::load_gltf, obj::load_obj}, rendering::VertexData, state::State};
 
@@ -22,6 +22,9 @@ impl Mesh {
         }
         if indices.len() == 0 {
             panic!("Empty index list not allowed!");
+        }
+        if *indices.iter().max().unwrap() as usize >= vertices.len() {
+            panic!("Index larger than vertex buffer length!");
         }
 
         Mesh {
@@ -106,6 +109,7 @@ pub fn load_model_meshes(assets: &mut AssetLibrary) {
                 continue;
             }
         };
+        debug!("{:?}", mam);
         assets.models.get_mut(i).unwrap().meshes_and_materials = mam;
     }
 }

@@ -50,7 +50,7 @@ impl AssetDescriptions {
                         x.name.clone(), 
                         x.vertex.clone(),
                         x.fragment.clone(),
-                        vec![Attachment::Texture("default".to_string())], 
+                        vec![Attachment::Texture("default".to_string()), Attachment::Texture("default".to_string())], 
                         x.paramaters.clone()
                     )
                 ).collect()

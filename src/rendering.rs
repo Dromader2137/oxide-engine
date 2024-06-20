@@ -70,6 +70,7 @@ pub struct VertexData {
     pub position: Vec3f,
     pub uv: Vec2f,
     pub normal: Vec3f,
+    pub tangent: Vec3f,
 }
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug)]

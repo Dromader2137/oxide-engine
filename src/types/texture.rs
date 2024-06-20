@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use image::{io::Reader, RgbaImage};
 
+use log::debug;
 use serde::{Deserialize, Serialize};
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
@@ -42,6 +43,7 @@ pub struct Texture {
 
 impl Texture {
     pub fn new(name: String) -> Texture {
+        debug!("{}", format!("assets/textures/{}", name));
         let image = Reader::open(format!("assets/textures/{}", name))
             .unwrap()
             .with_guessed_format()
