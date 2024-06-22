@@ -1,9 +1,9 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, usize};
 
 use gltf::accessor::DataType;
 use log::debug;
 
-use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f}}};
+use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, quaternion::Quat, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
 
 pub fn load_gltf(
@@ -13,11 +13,10 @@ pub fn load_gltf(
     let mut meshes_and_materials: Vec<(String, String)> = Vec::new();
     let document = gltf::Gltf::open(format!("assets/meshes/{}.gltf", model_name)).unwrap();
     let buffers = gltf::import_buffers(&document, Some(Path::new("assets/meshes/")), None).unwrap();
-    // let images = gltf::import_images(&document, Some(Path::new(&format!("assets/textures/{}/", model_name))), buffers.as_slice()).unwrap();
 
     let mut materials = HashMap::new();
-    for material in document.materials() {
-        let name = format!("{}{}", model_name, material.name().unwrap_or("aha"));
+    for (id, material) in document.materials().enumerate() {
+        let name = format!("{}-{}", model_name, id);
         materials.insert(material.index().unwrap(), name.clone());
         let name = name.replace('\\', "/");
 
@@ -35,12 +34,11 @@ pub fn load_gltf(
             None => -1
         };
         
-        debug!("{} {} {}", color_index, normal_index, name);
         let mut use_color = 0;
         let mut use_normal = 0;
 
         let color_name = if color_index >= 0 {
-            let color_uri = match document.images().nth(color_index as usize).unwrap().source() {
+            let color_uri = match document.images().nth(document.textures().nth(color_index as usize).unwrap().source().index()).unwrap().source() {
                 gltf::image::Source::View { .. } => "",
                 gltf::image::Source::Uri { uri, .. } => uri
             };
@@ -55,7 +53,7 @@ pub fn load_gltf(
         };
         
         let normal_name = if normal_index >= 0 {
-            let normal_uri = match document.images().nth(normal_index as usize).unwrap().source() {
+            let normal_uri = match document.images().nth(document.textures().nth(normal_index as usize).unwrap().source().index()).unwrap().source() {
                 gltf::image::Source::View { .. } => "",
                 gltf::image::Source::Uri { uri, .. } => uri
             };
@@ -85,8 +83,17 @@ pub fn load_gltf(
 
         assets.materials.push(mat);
     }
+    
+    for (n_id, node) in document.nodes().enumerate() {
+        let mesh = match node.mesh() {
+            Some(val) => val,
+            None => continue
+        };
 
-    for (m_id, mesh) in document.meshes().enumerate() {
+        let position = Vec3f::new(node.transform().decomposed().0);
+        let rotation = Quat::new_sl(node.transform().decomposed().1);
+        let scale = Vec3f::new(node.transform().decomposed().2);
+        
         for (prim_id, prim) in mesh.primitives().enumerate() {
             let material_id = prim.material().index().unwrap();
             let mat = materials.get(&material_id).unwrap();
@@ -122,9 +129,9 @@ pub fn load_gltf(
             let positions = {
                 let view = postition_attribute.view().unwrap();
                 let buffer = buffers.get(view.buffer().index()).unwrap();
-                let start = view.offset();
-                let end = view.length() + start;
+                let start = postition_attribute.offset() + view.offset();
                 let stride = 12;
+                let end = postition_attribute.count() * stride + start;
                 let mut pos = Vec::new();
 
                 let mut i = start;
@@ -145,9 +152,9 @@ pub fn load_gltf(
                 Some((_, attribute)) => {
                     let view = attribute.view().unwrap();
                     let buffer = buffers.get(view.buffer().index()).unwrap();
-                    let start = view.offset();
-                    let end = view.length() + start;
+                    let start = attribute.offset() + view.offset();
                     let stride = 12;
+                    let end = attribute.count() * stride + start;
                     let mut vec = Vec::new();
 
                     let mut i = start;
@@ -169,9 +176,9 @@ pub fn load_gltf(
                 Some((_, attribute)) => {
                     let view = attribute.view().unwrap();
                     let buffer = buffers.get(view.buffer().index()).unwrap();
-                    let start = view.offset();
-                    let end = view.length() + start;
+                    let start = attribute.offset() + view.offset();
                     let stride = 8;
+                    let end = attribute.count() * stride + start;
                     let mut vec = Vec::new();
 
                     let mut i = start;
@@ -192,9 +199,9 @@ pub fn load_gltf(
                 Some((_, attribute)) => {
                     let view = attribute.view().unwrap();
                     let buffer = buffers.get(view.buffer().index()).unwrap();
-                    let start = view.offset();
-                    let end = view.length() + start;
+                    let start = attribute.offset() + view.offset();
                     let stride = 16;
+                    let end = attribute.count() * stride + start;
                     let mut vec = Vec::new();
 
                     let mut i = start;
@@ -203,26 +210,25 @@ pub fn load_gltf(
                         let y = f32::from_le_bytes([buffer[i+4], buffer[i+5], buffer[i+6], buffer[i+7]]);
                         let z = f32::from_le_bytes([buffer[i+8], buffer[i+9], buffer[i+10], buffer[i+11]]);
                         let w = f32::from_le_bytes([buffer[i+12], buffer[i+13], buffer[i+14], buffer[i+15]]);
-                        if w == 1.0 {
-                            vec.push(Vec3f::new([x, y, z]));
-                        } else {
-                            vec.push(Vec3f::new([x, y, z]));
-                        }
+                        vec.push(Vec4f::new([x, y, z, w]));
 
                         i += stride;
                     }
 
                     vec
                 },
-                None => vec![Vec3f::new([0.0, 1.0, 0.0]); len]
+                None => vec![Vec4f::new([0.0, 1.0, 0.0, 1.0]); len]
             };
 
-            let vertices = (0..len).map(|i| {
+            let vertices: Vec<VertexData> = (0..len).map(|i| {
+                let tang = *tangent.get(i).unwrap_or(&Vec4f::new([0.0, 1.0, 0.0, 1.0]));
+                let tang3 = Vec3f::new([tang.x, tang.y, tang.z]) * rotation;
+                let tang = Vec4f::new([tang3.x, tang3.y, tang3.z, tang.w]);
                 VertexData {
-                    position: *positions.get(i).unwrap(),
-                    normal: *normals.get(i).unwrap_or(&Vec3f::new([0.0, 1.0, 0.0])),
+                    position: *positions.get(i).unwrap() * scale * rotation + position,
+                    normal: *normals.get(i).unwrap_or(&Vec3f::new([0.0, 1.0, 0.0])) * rotation,
                     uv: *uvs.get(i).unwrap_or(&Vec2f::new([0.0, 0.0])),
-                    tangent: *tangent.get(i).unwrap_or(&Vec3f::new([0.0, 1.0, 0.0]))
+                    tangent: tang 
                 }
             }).collect();
 
@@ -230,36 +236,30 @@ pub fn load_gltf(
                 Some(val) => {
                     let view = val.view().unwrap();
                     let buffer = buffers.get(view.buffer().index()).unwrap();
-                    let start = view.offset();
-                    let end = view.length() + start;
+                    let start = val.offset() + view.offset();
+                    let count = val.count();
                     let mut vec = Vec::new();
 
                     match val.data_type() {
                         DataType::U8 => {
-                        let mut i = start;
-                        while i < end {
+                        for i in 0..count {
+                            let i = i + start;
                             let x = u32::from_le_bytes([buffer[i], 0x00, 0x00, 0x00]);
                             vec.push(x);
-
-                            i += 1;
                         }
                         },
                         DataType::U16 => {
-                        let mut i = start;
-                        while i < end {
+                        for i in 0..count {
+                            let i = 2 * i + start;
                             let x = u32::from_le_bytes([buffer[i], buffer[i+1], 0x00, 0x00]);
                             vec.push(x);
-
-                            i += 2;
                         }
                         },
                         DataType::U32 => {
-                        let mut i = start;
-                        while i < end {
+                        for i in 0..count {
+                            let i = 4 * i + start;
                             let x = u32::from_le_bytes([buffer[i], buffer[i+1], buffer[i+2], buffer[i+3]]);
                             vec.push(x);
-
-                            i += 4;
                         }
                         },
                         _ => {
@@ -273,7 +273,9 @@ pub fn load_gltf(
                 None => (0..len as u32).collect()
             };
 
-            let name = format!("{}{}-{}", model_name, m_id, prim_id);
+            let name = format!("{}-{}-{}", model_name, n_id, prim_id);
+            debug!("Loading mesh {} with material {}...", name, mat);
+
             assets.meshes.push(
                 Mesh::new(&name, vertices, indices)
             );

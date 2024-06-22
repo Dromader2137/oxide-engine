@@ -43,7 +43,7 @@ pub struct Texture {
 
 impl Texture {
     pub fn new(name: String) -> Texture {
-        debug!("{}", format!("assets/textures/{}", name));
+        debug!("Loading texture {}", format!("assets/textures/{}", name));
         let image = Reader::open(format!("assets/textures/{}", name))
             .unwrap()
             .with_guessed_format()
@@ -229,7 +229,7 @@ fn default_texture(renderer: &Renderer) -> Texture {
     );
 
     let sampler =
-        Some(Sampler::new(renderer.device.clone(), SamplerCreateInfo::default()).unwrap());
+        Some(Sampler::new(renderer.device.clone(), SamplerCreateInfo::simple_repeat_linear()).unwrap());
 
     Texture {
         name: "default".to_string(),

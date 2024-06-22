@@ -97,6 +97,7 @@ pub fn load_model_meshes(assets: &mut AssetLibrary) {
     let len = assets.models.len();
     for i in 0..len {
         let model_name = assets.models.get(i).unwrap().name.clone();
+        debug!("Loading model {}", model_name);
         let mam = match model_name.split_once('.') {
             Some((name, "obj")) => load_obj(name.to_string(), assets).expect("Failed to load"),
             Some((name, "gltf")) => load_gltf(name.to_string(), assets).expect("Failed to load"),
@@ -109,7 +110,6 @@ pub fn load_model_meshes(assets: &mut AssetLibrary) {
                 continue;
             }
         };
-        debug!("{:?}", mam);
         assets.models.get_mut(i).unwrap().meshes_and_materials = mam;
     }
 }

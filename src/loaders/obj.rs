@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use log::{debug, error};
 
-use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f}}};
+use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
 
 pub fn load_obj(
@@ -124,7 +124,7 @@ pub fn load_obj(
                         position: Vec3f::new([pos[3*i],pos[3*i+1],pos[3*i+2]]),
                         normal,
                         uv,
-                        tangent: Vec3f::new([0.0, 1.0, 0.0])
+                        tangent: Vec4f::new([0.0, 1.0, 0.0, 1.0])
                 }
                 );
             }

@@ -1,7 +1,10 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use bytemuck::{Pod, Zeroable};
+use log::debug;
 use serde::{Deserialize, Serialize};
+
+use super::quaternion::Quat;
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
 #[repr(C, align(16))]
@@ -17,6 +20,15 @@ pub struct Vec3f {
     pub y: f32,
     pub z: f32,
     _align: i32
+}
+
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[repr(C, align(16))]
+pub struct Vec4f {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32
 }
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
@@ -550,5 +562,28 @@ impl Vec3d {
             y: self.y / len,
             z: self.z / len,
         }
+    }
+}
+
+impl Vec4f {
+    pub fn new(val: [f32; 4]) -> Vec4f {
+        Vec4f {
+            x: val[0],
+            y: val[1],
+            z: val[2],
+            w: val[3]
+        }
+    }
+}
+
+impl Mul<Quat> for Vec3f {
+    type Output = Vec3f;
+    fn mul(self, rhs: Quat) -> Self::Output {
+        let p = Quat::new([0.0, self.x, self.y, self.z]);
+        let pp = rhs.inv() * p * rhs;
+        if pp.x > 0.00001 {
+            debug!("{:?} {:?}", self, pp);
+        }
+        Vec3f::new([pp.y, pp.z, pp.w])
     }
 }
