@@ -93,15 +93,13 @@ impl Matrix4f {
         Matrix4f::rotation_x(xyz.x) * Matrix4f::rotation_z(xyz.z) * Matrix4f::rotation_y(xyz.y)
     }
 
-    pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Matrix4f {
+    pub fn perspective(fovy: f32, aspect: f32, near: f32) -> Matrix4f {
         let f = 1.0 / (fovy / 2.0).tan();
-        let a = (far + near) / (near - far);
-        let b = (2.0 * far * near) / (near - far);
         Matrix4f([
             [f / aspect, 0.0, 0.0, 0.0],
             [0.0, f, 0.0, 0.0],
-            [0.0, 0.0, a, -1.0],
-            [0.0, 0.0, b, 0.0],
+            [0.0, 0.0, 0.0, -1.0],
+            [0.0, 0.0, near, 0.0],
         ])
     }
 
@@ -112,13 +110,12 @@ impl Matrix4f {
         let mut f = dir.normalize();
         let mut u = f.cross(up.normalize()).normalize();
         let v = u.cross(f);
-        let w = Vec3f::new([-f.x, -f.y, -f.z]);
 
         Matrix4f([
-            [u.x, v.x, w.x, 0.0],
-            [u.y, v.y, w.y, 0.0],
-            [u.z, v.z, w.z, 0.0],
-            [-eye.dot(u), -eye.dot(v), -eye.dot(w), 1.0],
+            [u.x, v.x, f.x, 0.0],
+            [u.y, v.y, f.y, 0.0],
+            [u.z, v.z, f.z, 0.0],
+            [-eye.dot(u), -eye.dot(v), -eye.dot(f), 1.0],
         ])
     }
 

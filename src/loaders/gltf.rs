@@ -2,23 +2,28 @@ use std::{collections::HashMap, path::Path, usize};
 
 use gltf::accessor::DataType;
 use log::debug;
+use uuid::Uuid;
 
 use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, quaternion::Quat, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
-
 
 pub fn load_gltf(
     model_name: String,
     assets: &mut AssetLibrary
-) -> Result<Vec<(String, String)>, ()> {
-    let mut meshes_and_materials: Vec<(String, String)> = Vec::new();
+) -> Result<Vec<(Uuid, Uuid)>, ()> {
+    let mut meshes_and_materials = Vec::new();
     let document = gltf::Gltf::open(format!("assets/meshes/{}.gltf", model_name)).unwrap();
     let buffers = gltf::import_buffers(&document, Some(Path::new("assets/meshes/")), None).unwrap();
 
     let mut materials = HashMap::new();
     for (id, material) in document.materials().enumerate() {
-        let name = format!("{}-{}", model_name, id);
-        materials.insert(material.index().unwrap(), name.clone());
-        let name = name.replace('\\', "/");
+        let uuid = Uuid::new_v4();
+        let name = format!("{}.{}", model_name, {
+            match material.name() {
+                Some(val) => val.to_string(),
+                None => id.to_string(),
+            }
+        }).replace('\\', "/");
+        materials.insert(material.index().unwrap(), uuid);
 
         let color_index = match material.pbr_metallic_roughness().base_color_texture() {
             Some(val) => {
@@ -37,41 +42,43 @@ pub fn load_gltf(
         let mut use_color = 0;
         let mut use_normal = 0;
 
-        let color_name = if color_index >= 0 {
+        let color_texture = if color_index >= 0 {
+            use_color = 1;
+            
             let color_uri = match document.images().nth(document.textures().nth(color_index as usize).unwrap().source().index()).unwrap().source() {
                 gltf::image::Source::View { .. } => "",
                 gltf::image::Source::Uri { uri, .. } => uri
-            };
-            let color_uri = color_uri.replace('\\', "/");
+            }.replace('\\', "/");
             let name = format!("{}/{}", model_name, color_uri);
-            let color_texture = Texture::new(name.clone());
-            assets.textures.push(color_texture);
-            use_color = 1;
-            name
+            let uuid = Uuid::new_v4();
+            assets.textures.insert(uuid, Texture::new(name));
+
+            Attachment::Texture(uuid)
         } else {
-            "default".to_string()
+            Attachment::DefaultTexture
         };
         
-        let normal_name = if normal_index >= 0 {
+        let normal_texture = if normal_index >= 0 {
+            use_normal = 1;
+
             let normal_uri = match document.images().nth(document.textures().nth(normal_index as usize).unwrap().source().index()).unwrap().source() {
                 gltf::image::Source::View { .. } => "",
                 gltf::image::Source::Uri { uri, .. } => uri
-            };
-            let normal_uri = normal_uri.replace('\\', "/");
+            }.replace('\\', "/");
             let name = format!("{}/{}", model_name, normal_uri);
-            let normal_texture = Texture::new(name.clone());
-            assets.textures.push(normal_texture);
-            use_normal = 1;
-            name
+            let uuid = Uuid::new_v4();
+            assets.textures.insert(uuid, Texture::new(name));
+
+            Attachment::Texture(uuid)
         } else {
-            "default".to_string()
+            Attachment::DefaultTexture
         };
 
         let mat = Material::new(
             name, 
-            "perspective".to_string(),
-            "lit".to_string(),
-            vec![Attachment::Texture(color_name), Attachment::Texture(normal_name)],
+            *assets.shaders.iter().find(|(_, v)| v.name.as_str() == "perspective").expect("\"perspective\" shader needed").0,
+            *assets.shaders.iter().find(|(_, v)| v.name.as_str() == "lit").expect("\"lit\" shader needed").0,
+            vec![color_texture, normal_texture],
             Some(
                 MaterialParameters {
                     diffuse_color: Vec3f::new([1.0, 1.0, 1.0]),
@@ -81,7 +88,7 @@ pub fn load_gltf(
             )
         );
 
-        assets.materials.push(mat);
+        assets.materials.insert(uuid, mat);
     }
     
     for (n_id, node) in document.nodes().enumerate() {
@@ -97,6 +104,7 @@ pub fn load_gltf(
         for (prim_id, prim) in mesh.primitives().enumerate() {
             let material_id = prim.material().index().unwrap();
             let mat = materials.get(&material_id).unwrap();
+            let material_name = assets.materials.get(mat).unwrap().name.clone();
            
             let (_, postition_attribute) = prim.attributes().find(|(attr, _)| {
                 match attr {
@@ -273,16 +281,22 @@ pub fn load_gltf(
                 None => (0..len as u32).collect()
             };
 
-            let name = format!("{}-{}-{}", model_name, n_id, prim_id);
-            debug!("Loading mesh {} with material {}...", name, mat);
+            let name = format!("{}.{}.{}", model_name, {
+                match node.name() {
+                    Some(val) => val.to_string(),
+                    None => n_id.to_string()
+                }
+            }, prim_id);
+            debug!("Loading mesh {} with material {}...", name, material_name);
 
-            assets.meshes.push(
-                Mesh::new(&name, vertices, indices)
-            );
+            let uuid = Uuid::new_v4();
+            assets.meshes.insert(uuid, Mesh::new(&name, vertices, indices));
 
             meshes_and_materials.push(
-                (name,
-                mat.to_string()) 
+                (
+                    uuid,
+                    *mat
+                ) 
             );
         }
     }

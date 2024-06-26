@@ -4,6 +4,7 @@ use image::{io::Reader, RgbaImage};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage},
     command_buffer::{
@@ -23,7 +24,6 @@ use vulkano::{
 use crate::{
     asset_library::AssetLibrary,
     ecs::{System, World},
-    rendering::Renderer,
     state::State,
 };
 
@@ -63,12 +63,12 @@ impl Texture {
         }
     }
 
-    fn load(&mut self, renderer: &mut Renderer) {
+    fn load(&mut self, state: &State) {
         let img = RgbaImage::from_vec(self.width, self.height, self.image_data.clone()).unwrap();
 
         self.image = Some(
             Image::new(
-                renderer.memeory_allocator.clone(),
+                state.memory_allocators.standard_memory_allocator.clone(),
                 ImageCreateInfo {
                     image_type: ImageType::Dim2d,
                     format: Format::R8G8B8A8_UNORM,
@@ -85,17 +85,17 @@ impl Texture {
         );
 
         let command_buffer_allocator =
-            StandardCommandBufferAllocator::new(renderer.device.clone(), Default::default());
+            StandardCommandBufferAllocator::new(state.vulkan_context.device.clone(), Default::default());
 
         let mut builder = AutoCommandBufferBuilder::primary(
             &command_buffer_allocator,
-            renderer.queue.queue_family_index(),
+            state.vulkan_context.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )
         .unwrap();
 
         let temp_buffer = Buffer::from_iter(
-            renderer.memeory_allocator.clone(),
+            state.memory_allocators.standard_memory_allocator.clone(),
             BufferCreateInfo {
                 usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC,
                 ..Default::default()
@@ -118,8 +118,8 @@ impl Texture {
 
         let command_buffer = builder.build().unwrap();
 
-        let future = now(renderer.device.clone())
-            .then_execute(renderer.queue.clone(), command_buffer)
+        let future = now(state.vulkan_context.device.clone())
+            .then_execute(state.vulkan_context.queue.clone(), command_buffer)
             .unwrap()
             .then_signal_fence_and_flush()
             .unwrap();
@@ -134,10 +134,13 @@ impl Texture {
             .unwrap(),
         );
 
+        let mut create_info = SamplerCreateInfo::simple_repeat_linear();
+        create_info.anisotropy = state.renderer.anisotropic;
+
         self.sampler = Some(
             Sampler::new(
-                renderer.device.clone(),
-                SamplerCreateInfo::simple_repeat_linear(),
+                state.vulkan_context.device.clone(),
+                create_info
             )
             .unwrap(),
         );
@@ -148,8 +151,8 @@ pub struct TextureLoader {}
 
 impl System for TextureLoader {
     fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        for mesh in assets.textures.iter_mut() {
-            mesh.load(&mut state.renderer);
+        for (_, mesh) in assets.textures.iter_mut() {
+            mesh.load(state);
         }
     }
     fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
@@ -157,12 +160,12 @@ impl System for TextureLoader {
 
 pub struct DefaultTextureLoader {}
 
-fn default_texture(renderer: &Renderer) -> Texture {
+fn default_texture(state: &State) -> Texture {
     let img = RgbaImage::new(1, 1);
 
     let image = Some(
         Image::new(
-            renderer.memeory_allocator.clone(),
+            state.memory_allocators.standard_memory_allocator.clone(),
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
                 format: Format::R8G8B8A8_UNORM,
@@ -179,17 +182,17 @@ fn default_texture(renderer: &Renderer) -> Texture {
     );
 
     let command_buffer_allocator =
-        StandardCommandBufferAllocator::new(renderer.device.clone(), Default::default());
+        StandardCommandBufferAllocator::new(state.vulkan_context.device.clone(), Default::default());
 
     let mut builder = AutoCommandBufferBuilder::primary(
         &command_buffer_allocator,
-        renderer.queue.queue_family_index(),
+        state.vulkan_context.queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit,
     )
     .unwrap();
 
     let temp_buffer = Buffer::from_iter(
-        renderer.memeory_allocator.clone(),
+        state.memory_allocators.standard_memory_allocator.clone(),
         BufferCreateInfo {
             usage: BufferUsage::STORAGE_BUFFER | BufferUsage::TRANSFER_SRC,
             ..Default::default()
@@ -212,8 +215,8 @@ fn default_texture(renderer: &Renderer) -> Texture {
 
     let command_buffer = builder.build().unwrap();
 
-    let future = now(renderer.device.clone())
-        .then_execute(renderer.queue.clone(), command_buffer)
+    let future = now(state.vulkan_context.device.clone())
+        .then_execute(state.vulkan_context.queue.clone(), command_buffer)
         .unwrap()
         .then_signal_fence_and_flush()
         .unwrap();
@@ -227,9 +230,12 @@ fn default_texture(renderer: &Renderer) -> Texture {
         )
         .unwrap(),
     );
+        
+    let mut create_info = SamplerCreateInfo::simple_repeat_linear();
+    create_info.anisotropy = state.renderer.anisotropic;
 
     let sampler =
-        Some(Sampler::new(renderer.device.clone(), SamplerCreateInfo::simple_repeat_linear()).unwrap());
+        Some(Sampler::new(state.vulkan_context.device.clone(), create_info).unwrap());
 
     Texture {
         name: "default".to_string(),
@@ -247,10 +253,10 @@ impl System for DefaultTextureLoader {
         if assets
             .textures
             .iter()
-            .find(|x| x.name == "default".to_string())
+            .find(|(_, x)| x.name == "default".to_string())
             .is_none()
         {
-            assets.textures.push(default_texture(&state.renderer));
+            assets.textures.insert(Uuid::new_v4(), default_texture(state));
         }
     }
     fn on_update(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}

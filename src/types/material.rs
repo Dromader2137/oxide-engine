@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
+use uuid::Uuid;
 
 use crate::{asset_library::AssetLibrary, ecs::{System, World}, state::State};
 
@@ -15,16 +16,17 @@ pub struct MaterialParameters {
     pub use_normal_texture: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Attachment {
-    Texture(String)
+    DefaultTexture,
+    Texture(Uuid)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Material {
     pub name: String,
-    pub vertex_shader: String,
-    pub fragment_shader: String,
+    pub vertex_shader: Uuid,
+    pub fragment_shader: Uuid,
     pub attachments: Vec<Attachment>,
     pub parameters: Option<MaterialParameters>,
     #[serde(skip)]
@@ -34,15 +36,15 @@ pub struct Material {
 impl Material {
     pub fn new(
         name: String,
-        vertex_shader: String,
-        fragment_shader: String,
+        vertex_shader: Uuid,
+        fragment_shader: Uuid,
         attachments: Vec<Attachment>,
         parameters: Option<MaterialParameters>
     ) -> Material {
         Material {
             name: name.to_string(),
-            vertex_shader: vertex_shader.to_string(),
-            fragment_shader: fragment_shader.to_string(),
+            vertex_shader,
+            fragment_shader,
             attachments,
             parameters,
             parameter_buffer: None
@@ -54,7 +56,7 @@ impl Material {
 
         self.parameter_buffer = Some(
             Buffer::new_sized::<MaterialParameters>(
-                state.renderer.memeory_allocator.clone(),
+                state.memory_allocators.standard_memory_allocator.clone(),
                 BufferCreateInfo {
                     usage: BufferUsage::UNIFORM_BUFFER | BufferUsage::TRANSFER_DST,
                     ..Default::default()
@@ -75,7 +77,7 @@ pub struct MaterialLoader {}
 
 impl System for MaterialLoader {
     fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        for material in assets.materials.iter_mut() {
+        for (_, material) in assets.materials.iter_mut() {
             material.load(state);
         }
     }

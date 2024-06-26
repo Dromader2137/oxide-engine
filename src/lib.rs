@@ -1,12 +1,13 @@
 pub mod asset_library;
+pub mod asset_descriptions;
 pub mod ecs;
 pub mod input;
 pub mod rendering;
 pub mod state;
 pub mod types;
-pub mod utility;
-pub mod asset_descriptions;
 pub mod loaders;
+pub mod vulkan;
+pub mod ui;
 
 use std::fs;
 use std::time::Instant;
@@ -20,11 +21,15 @@ use state::State;
 use types::camera::CameraUpdater;
 use types::material::MaterialLoader;
 use types::mesh::MeshBufferLoader;
+use types::model::ModelComponentUuidLoader;
 use types::shader::ShaderLoader;
 use types::texture::{DefaultTextureLoader, TextureLoader};
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
+use ui::ui_layout::UiMeshBuilder;
+use vulkan::context::VulkanContext;
+use vulkan::memory::MemoryAllocators;
 use winit::event::DeviceEvent::MouseMotion;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
@@ -46,22 +51,33 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
         
     let event_loop = EventLoop::new();
     let window = Window::new(&event_loop);
+    let vulkan_context = VulkanContext::new(&window);
+    let memory_allocators = MemoryAllocators::new(&vulkan_context);
+    let renderer = Renderer::new(&vulkan_context, &memory_allocators, &window) ;
     let mut state = State {
-        window: window.clone(),
+        window,
         input: InputManager::new(),
-        renderer: Renderer::new(&window),
+        vulkan_context,
+        memory_allocators,
+        renderer,
         time: 0.0,
         delta_time: 0.0
     };
 
+    world.add_system(ModelComponentUuidLoader {});
+    world.add_system(UiMeshBuilder {});
+
     world.add_system(TransformUpdater {});
     world.add_system(CameraUpdater {});
+
     world.add_system(MaterialLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
-    world.add_system(DefaultTextureLoader {});
     world.add_system(MeshBufferLoader {});
+
+    world.add_system(DefaultTextureLoader {});
     world.add_system(RendererHandler {});
+
     world.start(&mut assets, &mut state);
 
     event_loop.event_loop.set_control_flow(ControlFlow::Poll);
@@ -69,52 +85,39 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
         .event_loop
         .run(move |event, elwt| match event {
             Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
+                event: WindowEvent::CloseRequested, ..
             } => {
                 trace!("Close requested!");
                 elwt.exit();
             }
             Event::WindowEvent {
-                event: WindowEvent::Resized(_),
-                ..
+                event: WindowEvent::Resized(_), ..
             } => {
                 trace!("Resizing!");
                 state.renderer.window_resized = true;
             }
             Event::WindowEvent {
-                event:
-                    KeyboardInput {
-                        event:
-                            KeyEvent {
+                event: KeyboardInput {
+                    event: KeyEvent {
                                 logical_key: key_code,
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    },
-                ..
+                                state: ElementState::Pressed, ..
+                    }, .. 
+                }, ..
             } => {
                 state.input.process_key_press(key_code);
             }
             Event::WindowEvent {
-                event:
-                    KeyboardInput {
-                        event:
-                            KeyEvent {
+                event: KeyboardInput {
+                        event: KeyEvent {
                                 logical_key: key_code,
-                                state: ElementState::Released,
-                                ..
-                            },
-                        ..
-                    },
-                ..
+                                state: ElementState::Released, ..
+                    }, ..
+                }, ..
             } => {
                 state.input.process_key_release(key_code);
             }
             Event::DeviceEvent {
-                event: MouseMotion { delta: (x, y) },
-                ..
+                event: MouseMotion { delta: (x, y) }, ..
             } => {
                 state.input.mouse_pos += Vec2f::new([x as f32, y as f32]);
             }

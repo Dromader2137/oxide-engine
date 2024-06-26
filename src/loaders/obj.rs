@@ -1,6 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use log::{debug, error};
+use uuid::Uuid;
 
 use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
@@ -8,8 +9,8 @@ use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material
 pub fn load_obj(
     model_name: String,
     assets: &mut AssetLibrary
-) -> Result<Vec<(String, String)>, ()> {
-    let mut meshes_and_materials: Vec<(String, String)> = Vec::new();
+) -> Result<Vec<(Uuid, Uuid)>, ()> {
+    let mut meshes_and_materials = Vec::new();
         let obj = tobj::load_obj(format!("assets/meshes/{}.obj", model_name), &tobj::GPU_LOAD_OPTIONS);
         let (meshes, materials) = match obj {
             Ok(val) => val,
@@ -27,36 +28,39 @@ pub fn load_obj(
             }
         };
 
+        let mut material_map = HashMap::new();
         for material in materials.iter() {
-            let name = format!("{}{}", model_name, material.name);
-            if assets.materials.iter().find(|x| x.name == name).is_some() { return Err(()); }
+            let uuid = Uuid::new_v4();
+            let name = format!("{}-{}", model_name, material.name);
+            material_map.insert(name.clone(), uuid);
 
-            assets.materials.push(
+            assets.materials.insert(
+                uuid,
                 Material::new(
                     name.clone(),
-                    "perspective".to_string(),
-                    "lit".to_string(),
+                    *assets.shaders.iter().find(|(_, v)| v.name.as_str() == "perspective").expect("\"perspective\" shader needed").0,
+                    *assets.shaders.iter().find(|(_, v)| v.name.as_str() == "lit").expect("\"lit\" shader needed").0,
                     vec![
             {
                 match &material.diffuse_texture {
                     Some(val) => {
-                        let name = format!("{}/{}", model_name, val);
-                        let name = name.replace('\\', "/");
-                        assets.textures.push(Texture::new(name.clone()));
-                        Attachment::Texture(name.clone())
-                    }
-                    None => Attachment::Texture("default".to_string())
+                        let name = format!("{}/{}", model_name, val).replace('\\', "/");
+                        let uuid = Uuid::new_v4();
+                        assets.textures.insert(uuid, Texture::new(name));
+                        Attachment::Texture(uuid)
+                    },
+                    None => Attachment::DefaultTexture
                 }
             },
             {
                 match &material.normal_texture {
                     Some(val) => {
-                        let name = format!("{}/{}", model_name, val);
-                        let name = name.replace('\\', "/");
-                        assets.textures.push(Texture::new(name.clone()));
-                        Attachment::Texture(name.clone())
-                    }
-                    None => Attachment::Texture("default".to_string())
+                        let name = format!("{}/{}", model_name, val).replace('\\', "/");
+                        let uuid = Uuid::new_v4();
+                        assets.textures.insert(uuid, Texture::new(name));
+                        Attachment::Texture(uuid)
+                    },
+                    None => Attachment::DefaultTexture
                 }
             },
                     ],
@@ -83,7 +87,9 @@ pub fn load_obj(
             let mat = match mesh.mesh.material_id {
                 Some(material_id) => {
                     match materials.get(material_id) {
-                        Some(material) => format!("{}{}", model_name, material.name),
+                        Some(material) => {
+                            material_map.get(&format!("{}-{}", model_name, material.name)).unwrap()
+                        },
                         None => {
                             error!("Material loading error for {}: material id not found", model_name);
                             return Err(());
@@ -91,7 +97,10 @@ pub fn load_obj(
 
                     }
                 },
-                None => "default".to_string()
+                None => {
+                    error!("Material loading error for {}: objects without material currently not supported", model_name);
+                    return Err(());
+                }
             };
             let name = format!("{}{}", model_name, id);
             let ret = used_names.insert(name.clone());
@@ -129,14 +138,15 @@ pub fn load_obj(
                 );
             }
 
-            assets.meshes.push(
-                Mesh::new(&name, vertices, mesh.mesh.indices.clone()),
-            );
+            let uuid = Uuid::new_v4();
+            assets.meshes.insert(uuid, Mesh::new(&name, vertices, mesh.mesh.indices.clone()));
 
-            meshes_and_materials.push((
-                    name,
-                    mat
-            ));
+            meshes_and_materials.push(
+                (
+                    uuid,
+                    *mat
+                )
+            );
         }
 
         Ok(meshes_and_materials)

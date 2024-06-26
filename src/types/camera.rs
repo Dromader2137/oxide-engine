@@ -6,7 +6,6 @@ use super::{matrices::Matrix4f, transform::Transform, vectors::Vec3f};
 pub struct Camera {
     pub vfov: f32,
     pub near: f32,
-    pub far: f32,
 }
 
 pub struct CameraUpdater {}

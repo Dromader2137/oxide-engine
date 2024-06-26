@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{fs::File, io::Read, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use vulkano::shader::{ShaderModule, ShaderModuleCreateInfo};
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_pipeline, Renderer}, state::State, utility::read_file_to_words};
+use vulkano::shader::{spirv::bytes_to_words, ShaderModule, ShaderModuleCreateInfo};
+use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::get_pipeline, state::State, vulkan::context::VulkanContext};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ShaderType {
@@ -22,10 +22,10 @@ pub struct Shader {
 }
 
 impl Shader {
-    pub fn load(&mut self, renderer: &mut Renderer) {
+    pub fn load(&mut self, context: &VulkanContext) {
         unsafe {
             self.module = Some(ShaderModule::new(
-                renderer.device.clone(), 
+                context.device.clone(), 
                 ShaderModuleCreateInfo::new(self.source.as_slice())
             ).unwrap());
         }
@@ -41,21 +41,28 @@ impl Shader {
     }
 }
 
+pub fn read_file_to_words(path: &str) -> Vec<u32> {
+    let mut file = File::open(path).unwrap();
+    let mut buffer = vec![0u8; file.metadata().unwrap().len() as usize];
+    file.read_exact(buffer.as_mut_slice()).unwrap();
+    bytes_to_words(buffer.as_slice()).unwrap().to_vec()
+}
+
 pub struct ShaderLoader {}
 
 impl System for ShaderLoader {
     fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        for shader in assets.shaders.iter_mut() {
-            shader.load(&mut state.renderer);
+        for (_, shader) in assets.shaders.iter_mut() {
+            shader.load(&state.vulkan_context);
         }
 
-        for material in assets.materials.iter() {
+        for (_, material) in assets.materials.iter() {
             state.renderer.pipelines.insert(
                 (material.vertex_shader.clone(), material.fragment_shader.clone()),
                 get_pipeline(
                     state, 
-                    assets.shaders.iter().find(|x| x.name == material.vertex_shader).unwrap(), 
-                    assets.shaders.iter().find(|x| x.name == material.fragment_shader).unwrap()
+                    assets.shaders.get(&material.vertex_shader).unwrap(), 
+                    assets.shaders.get(&material.fragment_shader).unwrap(), 
                 )        
             );
         }
