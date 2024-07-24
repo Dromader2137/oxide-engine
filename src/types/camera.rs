@@ -15,12 +15,12 @@ impl System for CameraUpdater {
     fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
         let mut query = world.entities.query::<(&Camera, &Transform)>();
         let transform_data = query.iter().next().expect("Camera with trasform not found!").1.1;
-        let cam_rot = Matrix4f::rotation_xzy(transform_data.rotation);
+        let cam_rot = transform_data.rotation.to_matrix();
         state.renderer.vp_pos = transform_data.position;
         state.renderer.vp_data.view = Matrix4f::look_at(
             Vec3f::new([0.0, 0.0, 0.0]),
-            cam_rot.vec_mul(Vec3f::new([1.0, 0.0, 0.0])),
-            cam_rot.vec_mul(Vec3f::new([0.0, 1.0, 0.0])),
+            cam_rot.vec_mul_inv(Vec3f::new([0.0, 0.0, -1.0])),
+            cam_rot.vec_mul_inv(Vec3f::new([0.0, 1.0, 0.0])),
         );
     }
 }

@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::vectors::*;
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C)]
-pub struct Matrix4f([[f32; 4]; 4]);
+pub struct Matrix4f(pub [[f32; 4]; 4]);
 
 impl Mul for Matrix4f {
     type Output = Self;
@@ -92,6 +92,10 @@ impl Matrix4f {
     pub fn rotation_xzy(xyz: Vec3f) -> Matrix4f {
         Matrix4f::rotation_x(xyz.x) * Matrix4f::rotation_z(xyz.z) * Matrix4f::rotation_y(xyz.y)
     }
+    
+    pub fn rotation_zyx(xyz: Vec3f) -> Matrix4f {
+        Matrix4f::rotation_z(xyz.z) * Matrix4f::rotation_y(xyz.y) * Matrix4f::rotation_x(xyz.x)
+    }
 
     pub fn perspective(fovy: f32, aspect: f32, near: f32) -> Matrix4f {
         let f = 1.0 / (fovy / 2.0).tan();
@@ -120,6 +124,14 @@ impl Matrix4f {
     }
 
     pub fn vec_mul(&self, vec: Vec3f) -> Vec3f {
+        Vec3f::new([
+            vec.x * self.0[0][0] + vec.y * self.0[1][0] + vec.z * self.0[2][0],
+            vec.x * self.0[0][1] + vec.y * self.0[1][1] + vec.z * self.0[2][1],
+            vec.x * self.0[0][2] + vec.y * self.0[1][2] + vec.z * self.0[2][2],
+        ])
+    }
+    
+    pub fn vec_mul_inv(&self, vec: Vec3f) -> Vec3f {
         Vec3f::new([
             vec.x * self.0[0][0] + vec.y * self.0[0][1] + vec.z * self.0[0][2],
             vec.x * self.0[1][0] + vec.y * self.0[1][1] + vec.z * self.0[1][2],

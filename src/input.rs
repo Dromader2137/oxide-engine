@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use winit::keyboard::Key;
+use winit::{event::MouseButton, keyboard::Key};
 
 use crate::{
     asset_library::AssetLibrary,
@@ -11,11 +11,17 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct InputManager {
-    pub pressed: HashSet<Key>,
-    pub down: HashSet<Key>,
-    pub released: HashSet<Key>,
+    pub key_pressed: HashSet<Key>,
+    pub key_down: HashSet<Key>,
+    pub key_released: HashSet<Key>,
+    
+    pub button_pressed: HashSet<MouseButton>,
+    pub button_down: HashSet<MouseButton>,
+    pub button_released: HashSet<MouseButton>,
 
-    pub mouse_pos: Vec2f,
+    pub cursor_position: Vec2f,
+
+    mouse_pos: Vec2f,
     prev_mouse_pos: Option<Vec2f>,
 }
 
@@ -24,9 +30,9 @@ impl InputManager {
         if let Key::Character(key) = key_code {
             key_code = Key::Character(key.to_lowercase().into());
         }
-        let already_there = self.down.insert(key_code.clone());
+        let already_there = self.key_down.insert(key_code.clone());
         if already_there {
-            self.pressed.insert(key_code);
+            self.key_pressed.insert(key_code);
         }
     }
 
@@ -34,8 +40,20 @@ impl InputManager {
         if let Key::Character(key) = key_code {
             key_code = Key::Character(key.to_lowercase().into());
         }
-        self.down.remove(&key_code);
-        self.released.insert(key_code);
+        self.key_down.remove(&key_code);
+        self.key_released.insert(key_code);
+    }
+    
+    pub fn process_button_press(&mut self, button: MouseButton) {
+        let already_there = self.button_down.insert(button.clone());
+        if already_there {
+            self.button_pressed.insert(button);
+        }
+    }
+
+    pub fn process_button_release(&mut self, button: MouseButton) {
+        self.button_down.remove(&button);
+        self.button_released.insert(button);
     }
 
     pub fn get_mouse_delta(&self) -> Vec2f {
@@ -50,19 +68,29 @@ impl InputManager {
     }
 
     pub fn clear_temp(&mut self) {
-        self.pressed.clear();
-        self.released.clear();
+        self.key_pressed.clear();
+        self.key_released.clear();
+        self.button_pressed.clear();
+        self.button_released.clear();
         self.prev_mouse_pos = Some(self.mouse_pos);
     }
 
     pub fn new() -> InputManager {
         InputManager {
-            pressed: HashSet::new(),
-            down: HashSet::new(),
-            released: HashSet::new(),
+            key_pressed: HashSet::new(),
+            key_down: HashSet::new(),
+            key_released: HashSet::new(),
+            button_down: HashSet::new(),
+            button_pressed: HashSet::new(),
+            button_released: HashSet::new(), 
+            cursor_position: Vec2f::new([0.0, 0.0]),
             mouse_pos: Vec2f::new([0.0, 0.0]),
             prev_mouse_pos: None,
         }
+    }
+
+    pub fn mouse_motion(&mut self, delta: Vec2f) {
+        self.mouse_pos += delta;
     }
 }
 

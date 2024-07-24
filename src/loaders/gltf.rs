@@ -4,7 +4,7 @@ use gltf::accessor::DataType;
 use log::debug;
 use uuid::Uuid;
 
-use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, quaternion::Quat, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
+use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, mesh::Mesh, quaternion::Quat, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
 pub fn load_gltf(
     model_name: String,
@@ -85,7 +85,8 @@ pub fn load_gltf(
                     use_diffuse_texture: use_color,
                     use_normal_texture: use_normal
                 }
-            )
+            ),
+            RenderingType::Fill
         );
 
         assets.materials.insert(uuid, mat);
@@ -102,9 +103,31 @@ pub fn load_gltf(
         let scale = Vec3f::new(node.transform().decomposed().2);
         
         for (prim_id, prim) in mesh.primitives().enumerate() {
-            let material_id = prim.material().index().unwrap();
-            let mat = materials.get(&material_id).unwrap();
-            let material_name = assets.materials.get(mat).unwrap().name.clone();
+            let mat = match prim.material().index() {
+                Some(val) => {
+                    *materials.get(&val).unwrap()
+                }
+                None => {
+                    let uuid = Uuid::new_v4();
+                    let material = Material::new(
+                        format!("Material{}", prim_id), 
+                        *assets.shaders.iter().find(|(_, v)| v.name.as_str() == "perspective").expect("\"perspective\" shader needed").0,
+                        *assets.shaders.iter().find(|(_, v)| v.name.as_str() == "lit").expect("\"lit\" shader needed").0,
+                        vec![Attachment::DefaultTexture, Attachment::DefaultTexture],
+                        Some(
+                            MaterialParameters {
+                                diffuse_color: Vec3f::new([1.0, 1.0, 1.0]),
+                                use_diffuse_texture: 0,
+                                use_normal_texture: 0
+                            }
+                        ),
+                        RenderingType::Fill
+                    );
+                    assets.materials.insert(uuid, material);
+                    uuid
+                }
+            };
+            let material_name = assets.materials.get(&mat).unwrap().name.clone();
            
             let (_, postition_attribute) = prim.attributes().find(|(attr, _)| {
                 match attr {
@@ -295,7 +318,7 @@ pub fn load_gltf(
             meshes_and_materials.push(
                 (
                     uuid,
-                    *mat
+                    mat
                 ) 
             );
         }

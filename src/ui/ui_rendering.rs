@@ -5,7 +5,8 @@ use crate::{asset_library::AssetLibrary, ecs::World, rendering::rendering_compon
 pub struct UiRenderingComponent {}
 
 impl RenderingComponent for UiRenderingComponent {
-    fn render(&self,
+    fn render(
+            &self,
             mut builder:
                 AutoCommandBufferBuilder<
                     PrimaryAutoCommandBuffer<StandardCommandBufferAllocator>, 

@@ -58,11 +58,12 @@ impl System for ShaderLoader {
 
         for (_, material) in assets.materials.iter() {
             state.renderer.pipelines.insert(
-                (material.vertex_shader.clone(), material.fragment_shader.clone()),
+                (material.vertex_shader, material.fragment_shader),
                 get_pipeline(
                     state, 
                     assets.shaders.get(&material.vertex_shader).unwrap(), 
                     assets.shaders.get(&material.fragment_shader).unwrap(), 
+                    material.rendering_type.into()
                 )        
             );
         }

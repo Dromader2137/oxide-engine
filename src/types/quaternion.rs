@@ -3,7 +3,9 @@ use std::ops::Mul;
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+use crate::types::{matrices::Matrix4f, vectors::Vec3f};
+
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C, align(16))]
 pub struct Quat {
     pub x: f32,
@@ -38,6 +40,51 @@ impl Quat {
             -self.z,
             -self.w
         ])
+    }
+
+    pub fn to_matrix(&self) -> Matrix4f {
+        let q = self.normalize();
+        let qr = q.x;
+        let qi = q.y;
+        let qj = q.z;
+        let qk = q.w;
+
+        Matrix4f([
+            [1.0-2.0*(qj*qj + qk*qk), 2.0*(qi*qk + qj*qr),     2.0*(qi*qj - qk*qr),     0.0],
+            [2.0*(qi*qk - qj*qr),     1.0-2.0*(qi*qi + qj*qj), 2.0*(qj*qk + qi*qr),     0.0],
+            [2.0*(qi*qj + qk*qr),     2.0*(qj*qk - qi*qr),     1.0-2.0*(qi*qi + qk*qk), 0.0],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+    }
+
+    pub fn from_euler(e: Vec3f) -> Quat {
+        let cu = (e.x / 2.0).cos();
+        let cw = (e.y / 2.0).cos();
+        let cv = (e.z / 2.0).cos();
+        
+        let su = (e.x / 2.0).sin();
+        let sw = (e.y / 2.0).sin();
+        let sv = (e.z / 2.0).sin();
+
+        Quat {
+            x: cu*cv*cw + su*sv*sw,
+            y: su*cv*cw - cu*sv*sw,
+            z: cu*sv*cw + su*cv*sw,
+            w: cu*cv*sw - su*sv*cw
+        }
+    }
+
+    pub fn length_sqr(&self) -> f32 {
+        self.x*self.x + self.y*self.y + self.z*self.z + self.w*self.w
+    }
+
+    pub fn length(&self) -> f32 {
+        self.length_sqr().sqrt()
+    }
+
+    pub fn normalize(&self) -> Quat {
+        let len = self.length();
+        Quat::new([self.x / len, self.y / len, self.z / len, self.w / len])
     }
 }
 

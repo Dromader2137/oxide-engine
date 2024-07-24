@@ -73,6 +73,7 @@ impl VulkanContext {
             buffer_device_address: true,
             runtime_descriptor_array: true,
             sampler_anisotropy: true,
+            fill_mode_non_solid: true,
             ..Features::empty()
         };
         let extensions = DeviceExtensions {

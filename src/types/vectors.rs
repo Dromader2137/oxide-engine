@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 
 use super::quaternion::Quat;
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C, align(16))]
 pub struct Vec2f {
     pub x: f32,
     pub y: f32,
     _align: i64
 }
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C, align(16))]
 pub struct Vec3f {
     pub x: f32,
@@ -22,7 +22,7 @@ pub struct Vec3f {
     _align: i32
 }
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C, align(16))]
 pub struct Vec4f {
     pub x: f32,
@@ -31,13 +31,13 @@ pub struct Vec4f {
     pub w: f32
 }
 
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct Vec2d {
     pub x: f64,
     pub y: f64,
 }
-#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct Vec3d {
     pub x: f64,
@@ -572,6 +572,24 @@ impl Vec4f {
             y: val[1],
             z: val[2],
             w: val[3]
+        }
+    }
+    
+    pub fn length_sqr_xyz(&mut self) -> f32 {
+        self.x * self.x + self.y * self.y + self.z * self.z
+    }
+    
+    pub fn length_xyz(&mut self) -> f32 {
+        self.length_sqr_xyz().sqrt()
+    }
+    
+    pub fn normalize_xyz(&mut self) -> Vec4f {
+        let len = self.length_xyz();
+        Vec4f {
+            x: self.x / len,
+            y: self.y / len,
+            z: self.z / len,
+            w: self.w
         }
     }
 }

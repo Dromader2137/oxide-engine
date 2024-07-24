@@ -1,11 +1,12 @@
-use core::panic;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use std::usize;
 
 use bytemuck::{Pod, Zeroable};
 
-use log::error;
+use log::{debug, error};
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -28,7 +29,7 @@ use vulkano::pipeline::graphics::color_blend::{
 use vulkano::pipeline::graphics::depth_stencil::{CompareOp, DepthState, DepthStencilState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
-use vulkano::pipeline::graphics::rasterization::RasterizationState;
+use vulkano::pipeline::graphics::rasterization::{PolygonMode, RasterizationState};
 use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition, VertexInputState};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
@@ -128,25 +129,6 @@ type Fence = Option<
     >,
 >;
 
-#[derive(Clone)]
-pub struct MeshBuffers {
-    pub vertex_ptr: Option<Subbuffer<[u64]>>,
-    pub index_ptr: Option<Subbuffer<[u64]>>,
-    pub model: Option<Subbuffer<[ModelData]>>,
-    pub indirect_draw: Option<Subbuffer<[DrawIndirectCommand]>>,
-}
-
-impl MeshBuffers {
-    pub fn new() -> MeshBuffers {
-        MeshBuffers {
-            vertex_ptr: None,
-            index_ptr: None,
-            indirect_draw: None,
-            model: None,
-        }
-    }
-}
-
 
 #[allow(dead_code)]
 pub struct Renderer {
@@ -165,11 +147,11 @@ pub struct Renderer {
     pub frames_in_flight: usize,
 
     pub fences: Vec<Fence>,
+    pub mesh_cache: Vec<Vec<(Arc<Subbuffer<[VertexData]>>, Arc<Subbuffer<[u32]>>)>>,
     pub previous_fence: usize,
 
     pub pipelines: HashMap<(Uuid, Uuid), Arc<GraphicsPipeline>>,
     pub rendering_components: Vec<Box<dyn RenderingComponent>>,
-    pub dynamic_mesh_data: HashMap<Uuid, MeshBuffers>,
 
     pub anisotropic: Option<f32>
 }
@@ -263,8 +245,8 @@ fn get_framebuffers(
         .collect::<Vec<_>>()
 }
 
-pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipeline> {
-    let vertex_type = vs.shader_type.clone();
+pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader, polygon_mode: PolygonMode) -> Arc<GraphicsPipeline> {
+    let vertex_type = vs.shader_type;
 
     let vs = vs.module.as_ref().unwrap().entry_point("main").unwrap();
     let fs = fs.module.as_ref().unwrap().entry_point("main").unwrap();
@@ -305,7 +287,10 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
                 viewports: [state.renderer.viewport.clone()].into_iter().collect(),
                 ..Default::default()
             }),
-            rasterization_state: Some(RasterizationState::default()),
+            rasterization_state: Some(RasterizationState {
+                polygon_mode,
+                ..Default::default()
+            }),
             depth_stencil_state: Some(DepthStencilState {
                 depth: Some(DepthState {
                     write_enable: true,
@@ -332,185 +317,9 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader) -> Arc<GraphicsPipe
     .unwrap()
 }
 
-fn prepare_meshes(world: &World, assets: &AssetLibrary, state: &mut State, material: Uuid) {
-    let mut dynamic_query = world.entities.query::<(&mut DynamicMesh, &Transform)>();
-    let mut filtered_by_material: Vec<_> = dynamic_query
-        .iter()
-        .filter(|x| x.1.0.material == material)
-        .collect();
-    let pmb = match state.renderer.dynamic_mesh_data.get_mut(&material) {
-        Some(val) => val,
-        None => {
-            state
-                .renderer
-                .dynamic_mesh_data
-                .insert(material.clone(), MeshBuffers::new());
-            state.renderer.dynamic_mesh_data.get_mut(&material).unwrap()
-        }
-    };
-
-    let camera_pos = state.renderer.vp_pos;
-    filtered_by_material.sort_by(|a, b| {
-        (a.1 .1.position - camera_pos)
-            .length_sqr()
-            .total_cmp(&(b.1 .1.position - camera_pos).length_sqr())
-    });
-
-    let mut counter: u32 = 0;
-    let mut vertex_ptr = Vec::new();
-    let mut index_ptr = Vec::new();
-    let mut model = Vec::new();
-    let mut indirect = Vec::new();
-
-    for (_, (mesh, transform)) in filtered_by_material {
-        if mesh.mesh.is_none() {
-            continue;
-        }
-
-        let mesh_data = assets.meshes.get(&mesh.mesh.unwrap()).expect("Mesh not found");
-        if mesh_data.vertices.len() == 0 {
-            continue;
-        }
-
-        vertex_ptr.push(mesh_data.vertex_buffer.as_ref().unwrap().device_address().unwrap().get());
-        index_ptr.push(mesh_data.index_buffer.as_ref().unwrap().device_address().unwrap().get());
-
-        model.push(ModelData {
-            translation: Matrix4f::translation((transform.position - camera_pos).to_vec3f()),
-            rotation: Matrix4f::rotation_yxz(transform.rotation),
-            scale: Matrix4f::scale(transform.scale)
-        });
-        indirect.push(DrawIndirectCommand {
-            instance_count: 1,
-            first_instance: counter,
-            vertex_count: mesh_data.indices.len() as u32,
-            first_vertex: 0,
-        });
-
-        counter += 1;
-    }
-
-    for (_, (model_comp, transform)) in world
-        .entities
-        .query::<(&ModelComponent, &Transform)>()
-        .iter()
-    {
-        for (mesh_name, _) in assets
-            .models.get(&model_comp.model_uuid)
-            .unwrap()
-            .meshes_and_materials
-            .iter()
-            .filter(|x| x.1 == material)
-        {
-            let mesh_data = assets.meshes.get(mesh_name).expect("Mesh not found");
-            if mesh_data.vertices.len() == 0 {
-                continue;
-            }
-
-            vertex_ptr.push(mesh_data.vertex_buffer.as_ref().unwrap().device_address().unwrap().get());
-            index_ptr.push(mesh_data.index_buffer.as_ref().unwrap().device_address().unwrap().get());
-
-            model.push(ModelData {
-                translation: Matrix4f::translation((transform.position - camera_pos).to_vec3f()),
-                rotation: Matrix4f::rotation_yxz(transform.rotation),
-                scale: Matrix4f::scale(transform.scale)
-            });
-            indirect.push(DrawIndirectCommand {
-                instance_count: 1,
-                first_instance: counter,
-                vertex_count: mesh_data.indices.len() as u32,
-                first_vertex: 0,
-            });
-
-            counter += 1;
-        }
-    }
-
-    pmb.model = if model.len() > 0 {
-        Some(
-            Buffer::from_iter(
-                state.memory_allocators.standard_memory_allocator.clone(),
-                BufferCreateInfo {
-                    usage: BufferUsage::STORAGE_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                model,
-            )
-            .unwrap(),
-        )
-    } else {
-        None
-    };
-    pmb.vertex_ptr = if vertex_ptr.len() > 0 {
-        Some(
-            Buffer::from_iter(
-                state.memory_allocators.standard_memory_allocator.clone(),
-                BufferCreateInfo {
-                    usage: BufferUsage::STORAGE_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                vertex_ptr,
-            )
-            .unwrap(),
-        )
-    } else {
-        None
-    };
-    pmb.index_ptr = if index_ptr.len() > 0 {
-        Some(
-            Buffer::from_iter(
-                state.memory_allocators.standard_memory_allocator.clone(),
-                BufferCreateInfo {
-                    usage: BufferUsage::STORAGE_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                index_ptr,
-            )
-            .unwrap(),
-        )
-    } else {
-        None
-    };
-    pmb.indirect_draw = if indirect.len() > 0 {
-        Some(
-            Buffer::from_iter(
-                state.memory_allocators.standard_memory_allocator.clone(),
-                BufferCreateInfo {
-                    usage: BufferUsage::INDIRECT_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                indirect,
-            )
-            .unwrap(),
-        )
-    } else {
-        None
-    };
-}
-
 fn get_command_buffers(
     world: &World,
-    assets: &AssetLibrary,
+    assets: &mut AssetLibrary,
     state: &mut State,
     image_id: usize,
 ) -> Arc<PrimaryAutoCommandBuffer> {
@@ -580,23 +389,15 @@ fn get_swapchain(
 }
 
 fn recreate_pipelines(assets: &AssetLibrary, state: &mut State) {
-    let iter: Vec<(Uuid, Uuid)> = state.renderer.pipelines.keys().cloned().collect();
-    for pipeline in iter.iter() {
+    for (_, material) in assets.materials.iter() {
         state.renderer.pipelines.insert(
-            pipeline.clone(),
+            (material.vertex_shader, material.fragment_shader),
             get_pipeline(
-                state,
-                assets
-                    .shaders
-                    .iter()
-                    .find(|(k, _)| **k == pipeline.0)
-                    .unwrap().1,
-                assets
-                    .shaders
-                    .iter()
-                    .find(|(k, _)| **k == pipeline.1)
-                    .unwrap().1,
-            ),
+                state, 
+                assets.shaders.get(&material.vertex_shader).unwrap(), 
+                assets.shaders.get(&material.fragment_shader).unwrap(), 
+                material.rendering_type.into()
+            )        
         );
     }
 }
@@ -642,7 +443,8 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
 }
 
 #[allow(clippy::arc_with_non_send_sync)]
-fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
+fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
+    let timer = Instant::now();
     let (image_i, suboptimal, acquire_future) =
         match swapchain::acquire_next_image(state.renderer.swapchain.clone(), None)
             .map_err(Validated::unwrap)
@@ -658,16 +460,9 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
     if suboptimal {
         state.renderer.recreate_swapchain = true;
     }
-
-    for (material_uuid, _) in assets.materials.iter() {
-        prepare_meshes(world, assets, state, *material_uuid);
-    }
-
+    
     let command_buffer = get_command_buffers(world, assets, state, image_i as usize);
-    if let Some(image_fence) = &state.renderer.fences[image_i as usize] {
-        image_fence.wait(None).unwrap();
-    }
-
+    
     let previous_future = match state.renderer.fences[state.renderer.previous_fence].clone() {
         None => {
             let mut now = sync::now(state.vulkan_context.device.clone());
@@ -676,6 +471,10 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
         }
         Some(fence) => fence.boxed(),
     };
+    
+    if let Some(image_fence) = &state.renderer.fences[image_i as usize] {
+        image_fence.wait(None).unwrap();
+    }
 
     {
         let mut contents = state
@@ -686,8 +485,9 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
             .write()
             .unwrap();
         *contents = state.renderer.vp_data;
+        drop(contents);
     }
-
+    
     let future = previous_future
         .join(acquire_future)
         .then_execute(state.vulkan_context.queue.clone(), command_buffer)
@@ -697,7 +497,7 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
             SwapchainPresentInfo::swapchain_image_index(state.renderer.swapchain.clone(), image_i),
         )
         .then_signal_fence_and_flush();
-
+    
     state.renderer.fences[image_i as usize] = match future.map_err(Validated::unwrap) {
         Ok(value) => Some(Arc::new(value)),
         Err(VulkanError::OutOfDate) => {
@@ -710,6 +510,7 @@ fn render(world: &World, assets: &AssetLibrary, state: &mut State) {
         }
     };
     state.renderer.previous_fence = image_i as usize;
+    debug!(" Inside render: {}", timer.elapsed().as_millis());
 }
 
 impl Renderer {
@@ -777,10 +578,10 @@ impl Renderer {
             vp_buffers,
             pipelines: HashMap::new(),
             rendering_components: vec![
-                Box::new(DynamicMeshRenderingComponent {}),
+                Box::new(DynamicMeshRenderingComponent { dynamic_mesh_data: RefCell::new(HashMap::new()) }),
                 Box::new(UiRenderingComponent {})
             ],
-            dynamic_mesh_data: HashMap::new(),
+            mesh_cache: vec![Vec::new(); frames_in_flight],
             anisotropic: Some(context.physical_device.properties().max_sampler_anisotropy)
         }
     }
@@ -791,7 +592,11 @@ pub struct RendererHandler {}
 impl System for RendererHandler {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
+        let timer = Instant::now();
         handle_possible_resize(world, assets, state);
+        debug!(" Resize: {}", timer.elapsed().as_millis());
+        let timer = Instant::now();
         render(world, assets, state);
+        debug!(" Render: {}", timer.elapsed().as_millis());
     }
 }

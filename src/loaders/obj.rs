@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use log::{debug, error};
 use uuid::Uuid;
 
-use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
+use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
 
 pub fn load_obj(
@@ -77,7 +77,8 @@ pub fn load_obj(
                             Some(_) => 1,
                             None => 0
                         }
-                    })
+                    }),
+            RenderingType::Fill
             )
                 );
         }

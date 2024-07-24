@@ -8,6 +8,7 @@ pub mod types;
 pub mod loaders;
 pub mod vulkan;
 pub mod ui;
+pub mod physics;
 
 use std::fs;
 use std::time::Instant;
@@ -16,23 +17,24 @@ use asset_descriptions::AssetDescriptions;
 use ecs::World;
 use input::InputManager;
 use log::trace;
+use physics::rigidbody::RigidbodyHandler;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
 use types::camera::CameraUpdater;
 use types::material::MaterialLoader;
-use types::mesh::MeshBufferLoader;
+use types::mesh::{DynamicMeshMaterialLoader, MeshBufferLoader};
 use types::model::ModelComponentUuidLoader;
 use types::shader::ShaderLoader;
 use types::texture::{DefaultTextureLoader, TextureLoader};
 use types::transform::TransformUpdater;
 
 use types::vectors::Vec2f;
-use ui::ui_layout::UiMeshBuilder;
+use ui::ui_layout::{UiHandler, UiMeshBuilder};
 use vulkan::context::VulkanContext;
 use vulkan::memory::MemoryAllocators;
 use winit::event::DeviceEvent::MouseMotion;
 use winit::event::WindowEvent::KeyboardInput;
-use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
+use winit::event::{ElementState, Event, KeyEvent, WindowEvent::{self, MouseInput}};
 use winit::event_loop::ControlFlow;
 
 pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
@@ -61,9 +63,11 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
         memory_allocators,
         renderer,
         time: 0.0,
-        delta_time: 0.0
+        delta_time: 0.0,
+        physics_time_scale: 1.0
     };
 
+    world.add_system(DynamicMeshMaterialLoader {});
     world.add_system(ModelComponentUuidLoader {});
     world.add_system(UiMeshBuilder {});
 
@@ -73,10 +77,12 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
     world.add_system(MaterialLoader {});
     world.add_system(ShaderLoader {});
     world.add_system(TextureLoader {});
-    world.add_system(MeshBufferLoader {});
+    world.add_system(MeshBufferLoader::new(&mut state));
 
-    world.add_system(DefaultTextureLoader {});
     world.add_system(RendererHandler {});
+    world.add_system(DefaultTextureLoader {});
+    world.add_system(RigidbodyHandler {});
+    world.add_system(UiHandler {});
 
     world.start(&mut assets, &mut state);
 
@@ -116,10 +122,42 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
             } => {
                 state.input.process_key_release(key_code);
             }
+            Event::WindowEvent {
+                event: MouseInput {
+                    device_id: _,
+                    state: ElementState::Pressed,
+                    button
+                }, ..
+            } => {
+                state.input.process_button_press(button);
+            }
+            Event::WindowEvent {
+                event: MouseInput {
+                    device_id: _,
+                    state: ElementState::Released,
+                    button
+                }, ..
+            } => {
+                state.input.process_button_release(button);
+            }
             Event::DeviceEvent {
                 event: MouseMotion { delta: (x, y) }, ..
             } => {
-                state.input.mouse_pos += Vec2f::new([x as f32, y as f32]);
+                state.input.mouse_motion(Vec2f::new([x as f32, y as f32]));
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::CursorMoved {
+                        device_id: _,
+                        position,
+                        ..
+                    },
+                ..
+            } => {
+                let logical_position = position.to_logical::<i32>(state.window.window_handle.scale_factor());
+                let x = logical_position.x as f32;
+                let y = logical_position.y as f32;
+                state.input.cursor_position = Vec2f::new([x, y]);
             }
             Event::AboutToWait => {
                 let current_time = (timer.elapsed().as_millis() as f64) / 1000.0;

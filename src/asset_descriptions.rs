@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{asset_library::AssetLibrary, types::{material::{Attachment, Material, MaterialParameters}, model::Model, shader::{Shader, ShaderType}, texture::Texture, vectors::Vec2f}, ui::ui_layout::{Anchor, UiElement, UiElements}};
+use crate::{asset_library::AssetLibrary, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, model::Model, shader::{Shader, ShaderType}, texture::Texture, vectors::Vec2f}, ui::ui_layout::{Anchor, UiElement, UiElementType, UiElements}};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -32,11 +32,13 @@ pub struct MaterialDescription {
     pub vertex: String,
     pub fragment: String,
     pub attachments: Vec<AttachmentDescription>,
-    pub paramaters: Option<MaterialParameters>
+    pub paramaters: Option<MaterialParameters>,
+    pub rendering_type: RenderingType
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UiElementDescription {
+    pub element_type: UiElementType,
     pub name: String,
     pub material: String,
     pub position: Vec2f,
@@ -100,7 +102,9 @@ impl AssetDescriptions {
                             AttachmentDescription::DefaultTexture => Attachment::DefaultTexture
                         }
                     ).collect(),
-                    material_description.paramaters.clone())
+                    material_description.paramaters.clone(),
+                    material_description.rendering_type
+                )
                 );
             }
             map
@@ -112,7 +116,7 @@ impl AssetDescriptions {
                 let material_uuid = materials.iter().find(|(_, material)| material.name == ui_element_desc.material)
                     .expect("Material not found").0;
                 vec.push(
-                    UiElement::new(&ui_element_desc.name, *material_uuid, ui_element_desc.screen_anchor, ui_element_desc.position, ui_element_desc.width, ui_element_desc.height)
+                    UiElement::new(&ui_element_desc.name, ui_element_desc.element_type, *material_uuid, ui_element_desc.screen_anchor, ui_element_desc.position, ui_element_desc.width, ui_element_desc.height)
                 );
             }
             UiElements { elements: vec }
