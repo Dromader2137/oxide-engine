@@ -2,7 +2,7 @@ use std::{fs::File, io::Read, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use vulkano::shader::{spirv::bytes_to_words, ShaderModule, ShaderModuleCreateInfo};
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::get_pipeline, state::State, vulkan::context::VulkanContext};
+use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_pipeline, PipelineIdentifier}, state::State, vulkan::context::VulkanContext};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ShaderType {
@@ -58,7 +58,7 @@ impl System for ShaderLoader {
 
         for (_, material) in assets.materials.iter() {
             state.renderer.pipelines.insert(
-                (material.vertex_shader, material.fragment_shader),
+                PipelineIdentifier::new(material.vertex_shader, material.fragment_shader, material.rendering_type),
                 get_pipeline(
                     state, 
                     assets.shaders.get(&material.vertex_shader).unwrap(), 

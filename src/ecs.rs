@@ -1,5 +1,6 @@
-use std::{collections::HashMap, time::Instant};
+use std::{borrow::Borrow, cell::{Cell, Ref, RefCell}, collections::HashMap, rc::Rc, time::Instant};
 
+use hecs::{DynamicBundle, Query, QueryBorrow, QueryIter};
 use log::debug;
 use uuid::Uuid;
 
@@ -15,7 +16,7 @@ pub trait Callback {
 }
 
 pub struct World {
-    pub entities: hecs::World,
+    pub entities: RefCell<hecs::World>,
     pub systems: Vec<Box<dyn System>>,
     pub callbacks: HashMap<Uuid, Box<dyn Callback>>,
 }
@@ -23,7 +24,7 @@ pub struct World {
 impl World {
     pub fn new() -> World {
         World {
-            entities: hecs::World::new(),
+            entities: RefCell::new(hecs::World::new()),
             systems: Vec::new(),
             callbacks: HashMap::new()
         }
@@ -46,13 +47,8 @@ impl World {
     }
 
     pub fn update(&mut self, assets: &mut AssetLibrary, state: &mut State) {
-        let mut timer = Instant::now();
-        let mut i = 0;
         for system in self.systems.iter() {
             system.on_update(self, assets, state);
-            debug!("{}: {}", i, timer.elapsed().as_millis());
-            i += 1;
-            timer = Instant::now();
         }
     }
 }

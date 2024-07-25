@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -53,6 +54,7 @@ use crate::asset_library::AssetLibrary;
 use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::camera::Camera;
+use crate::types::material::RenderingType;
 use crate::types::matrices::*;
 use crate::types::mesh::{DynamicMesh, DynamicMeshRenderingComponent};
 use crate::types::model::ModelComponent;
@@ -129,6 +131,22 @@ type Fence = Option<
     >,
 >;
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PipelineIdentifier {
+    vertex_shader: Uuid,
+    fragment_shader: Uuid,
+    rendering_type: RenderingType
+}
+
+impl PipelineIdentifier {
+    pub fn new(vertex_shader: Uuid, fragment_shader: Uuid, rendering_type: RenderingType) -> PipelineIdentifier {
+        PipelineIdentifier {
+            vertex_shader,
+            fragment_shader,
+            rendering_type
+        }
+    }
+}
 
 #[allow(dead_code)]
 pub struct Renderer {
@@ -150,7 +168,7 @@ pub struct Renderer {
     pub mesh_cache: Vec<Vec<(Arc<Subbuffer<[VertexData]>>, Arc<Subbuffer<[u32]>>)>>,
     pub previous_fence: usize,
 
-    pub pipelines: HashMap<(Uuid, Uuid), Arc<GraphicsPipeline>>,
+    pub pipelines: HashMap<PipelineIdentifier, Arc<GraphicsPipeline>>,
     pub rendering_components: Vec<Box<dyn RenderingComponent>>,
 
     pub anisotropic: Option<f32>
@@ -391,7 +409,7 @@ fn get_swapchain(
 fn recreate_pipelines(assets: &AssetLibrary, state: &mut State) {
     for (_, material) in assets.materials.iter() {
         state.renderer.pipelines.insert(
-            (material.vertex_shader, material.fragment_shader),
+            PipelineIdentifier::new(material.vertex_shader, material.fragment_shader, material.rendering_type),
             get_pipeline(
                 state, 
                 assets.shaders.get(&material.vertex_shader).unwrap(), 
@@ -403,7 +421,9 @@ fn recreate_pipelines(assets: &AssetLibrary, state: &mut State) {
 }
 
 fn recalculate_projection(world: &World, state: &mut State, new_dimensions: PhysicalSize<u32>) {
-    let mut camera = world.entities.query::<&Camera>();
+    let entities = world.entities.borrow_mut();
+
+    let mut camera = entities.query::<&Camera>();
     let camera_data = camera.iter().next().expect("Camera not found").1;
     state.renderer.vp_data.projection = Matrix4f::perspective(
         camera_data.vfov.to_radians(),
@@ -444,7 +464,6 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
 
 #[allow(clippy::arc_with_non_send_sync)]
 fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
-    let timer = Instant::now();
     let (image_i, suboptimal, acquire_future) =
         match swapchain::acquire_next_image(state.renderer.swapchain.clone(), None)
             .map_err(Validated::unwrap)
@@ -469,7 +488,9 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             now.cleanup_finished();
             now.boxed()
         }
-        Some(fence) => fence.boxed(),
+        Some(fence) => {
+            fence.boxed()
+        }
     };
     
     if let Some(image_fence) = &state.renderer.fences[image_i as usize] {
@@ -510,7 +531,6 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
         }
     };
     state.renderer.previous_fence = image_i as usize;
-    debug!(" Inside render: {}", timer.elapsed().as_millis());
 }
 
 impl Renderer {
@@ -592,11 +612,7 @@ pub struct RendererHandler {}
 impl System for RendererHandler {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        let timer = Instant::now();
         handle_possible_resize(world, assets, state);
-        debug!(" Resize: {}", timer.elapsed().as_millis());
-        let timer = Instant::now();
         render(world, assets, state);
-        debug!(" Render: {}", timer.elapsed().as_millis());
     }
 }

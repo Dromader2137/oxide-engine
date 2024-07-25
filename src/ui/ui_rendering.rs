@@ -1,6 +1,6 @@
 use vulkano::{pipeline::{Pipeline, PipelineBindPoint}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}};
 
-use crate::{asset_library::AssetLibrary, ecs::World, rendering::rendering_component::RenderingComponent, state::State, types::material::Attachment};
+use crate::{asset_library::AssetLibrary, ecs::World, rendering::{rendering_component::RenderingComponent, PipelineIdentifier}, state::State, types::material::{Attachment, RenderingType}};
 
 pub struct UiRenderingComponent {}
 
@@ -23,7 +23,7 @@ impl RenderingComponent for UiRenderingComponent {
             
         for ui_layout in assets.ui.elements.iter() {
             let material = assets.materials.get(&ui_layout.material).unwrap();
-            let pipeline = state.renderer.pipelines.get(&(material.vertex_shader, material.fragment_shader)).unwrap();
+            let pipeline = state.renderer.pipelines.get(&PipelineIdentifier::new(material.vertex_shader, material.fragment_shader, material.rendering_type)).unwrap().clone();
             let material_set = PersistentDescriptorSet::new(
                 state.memory_allocators.descriptor_set_allocator.as_ref(),
                 pipeline.layout().set_layouts().first().unwrap().clone(),

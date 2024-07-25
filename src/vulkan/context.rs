@@ -12,7 +12,7 @@ pub struct VulkanContext {
     pub render_surface: Arc<Surface>,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
-    pub transfer_queue: Option<Arc<Queue>>,
+    pub transfer_queue: Arc<Queue>,
 }
 
 fn select_physical_device(
@@ -106,7 +106,7 @@ impl VulkanContext {
                     if transfer_family_index.is_some() {
                         vec![
                             QueueCreateInfo {
-                                queue_family_index: queue_family_index,
+                                queue_family_index,
                                 ..Default::default()
                             },
                             QueueCreateInfo {
@@ -116,7 +116,7 @@ impl VulkanContext {
                         ]
                     } else {
                         vec![QueueCreateInfo {
-                            queue_family_index: queue_family_index,
+                            queue_family_index,
                             ..Default::default()
                         }]
                     }
@@ -128,7 +128,7 @@ impl VulkanContext {
         )
         .unwrap();
         let queue = queues.next().unwrap();
-        let transfer_queue = queues.next();
+        let transfer_queue = queues.next().unwrap_or(queue.clone());
 
         VulkanContext {
             library, 

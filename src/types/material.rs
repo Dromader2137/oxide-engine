@@ -22,7 +22,7 @@ pub enum Attachment {
     Texture(Uuid)
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderingType {
     Fill,
     Line,

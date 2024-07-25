@@ -41,7 +41,9 @@ pub struct ModelComponentUuidLoader {}
 
 impl System for ModelComponentUuidLoader {
     fn on_start(&self, world: &crate::ecs::World, assets: &mut AssetLibrary, _state: &mut crate::state::State) {
-        for (_, model_component) in world.entities.query::<&mut ModelComponent>().iter() {
+        let entities = world.entities.borrow_mut();
+
+        for (_, model_component) in entities.query::<&mut ModelComponent>().iter() {
             model_component.load_uuid(assets);
         }
     }

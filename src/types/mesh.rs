@@ -6,7 +6,7 @@ use uuid::Uuid;
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, DrawIndirectCommand, PrimaryAutoCommandBuffer}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, device::Device, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}, pipeline::{Pipeline, PipelineBindPoint}};
 use log::{debug, error};
 
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, loaders::{gltf::load_gltf, obj::load_obj}, rendering::{rendering_component::RenderingComponent, VertexData}, state::State};
+use crate::{asset_library::AssetLibrary, ecs::{System, World}, loaders::{gltf::load_gltf, obj::load_obj}, rendering::{rendering_component::RenderingComponent, PipelineIdentifier, VertexData}, state::State};
 
 use super::{material::Attachment, matrices::Matrix4f, model::ModelComponent, transform::{ModelData, Transform}};
 
@@ -166,7 +166,9 @@ impl DynamicMesh {
 }
 
 fn prepare_meshes(world: &World, assets: &AssetLibrary, state: &State, material: Uuid, dynamic_mesh_data: &mut HashMap<Uuid, MeshBuffers>) {
-    let mut dynamic_query = world.entities.query::<(&mut DynamicMesh, &Transform)>();
+    let entities = world.entities.borrow_mut();
+
+    let mut dynamic_query = entities.query::<(&mut DynamicMesh, &Transform)>();
     let mut filtered_by_material: Vec<_> = dynamic_query.iter().filter(|x| x.1.0.material == material).collect();
 
     let pmb = match dynamic_mesh_data.get_mut(&material) {
@@ -222,7 +224,7 @@ fn prepare_meshes(world: &World, assets: &AssetLibrary, state: &State, material:
         counter += 1;
     }
 
-    for (_, (model_comp, transform)) in world.entities.query::<(&ModelComponent, &Transform)>().iter() {
+    for (_, (model_comp, transform)) in entities.query::<(&ModelComponent, &Transform)>().iter() {
         for (mesh_name, _) in assets.models.get(&model_comp.model_uuid).unwrap().meshes_and_materials.iter().filter(|x| x.1 == material) {
             let mesh_data = assets.meshes.get(mesh_name).expect("Mesh not found");
             if mesh_data.vertex_buffer.is_none() {continue;}
@@ -393,7 +395,7 @@ impl RenderingComponent for DynamicMeshRenderingComponent {
                 continue;
             }
 
-            let pipeline = state.renderer.pipelines.get(&(material.vertex_shader, material.fragment_shader)).unwrap().clone();
+            let pipeline = state.renderer.pipelines.get(&PipelineIdentifier::new(material.vertex_shader, material.fragment_shader, material.rendering_type)).unwrap().clone();
 
             builder.bind_pipeline_graphics(pipeline.clone()).unwrap();
 
@@ -572,7 +574,9 @@ pub struct DynamicMeshMaterialLoader {}
 
 impl System for DynamicMeshMaterialLoader {
     fn on_start(&self, world: &World, assets: &mut AssetLibrary, _state: &mut State) {
-        for (_, mesh) in world.entities.query::<&mut DynamicMesh>().iter() {
+        let entities = world.entities.borrow_mut();
+
+        for (_, mesh) in entities.query::<&mut DynamicMesh>().iter() {
             mesh.load_material(assets);
         }
     }

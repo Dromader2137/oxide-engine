@@ -13,7 +13,9 @@ pub struct CameraUpdater {}
 impl System for CameraUpdater {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
     fn on_update(&self, world: &World, _assets: &mut AssetLibrary, state: &mut State) {
-        let mut query = world.entities.query::<(&Camera, &Transform)>();
+        let entities = world.entities.borrow_mut();
+
+        let mut query = entities.query::<(&Camera, &Transform)>();
         let transform_data = query.iter().next().expect("Camera with trasform not found!").1.1;
         let cam_rot = transform_data.rotation.to_matrix();
         state.renderer.vp_pos = transform_data.position;
