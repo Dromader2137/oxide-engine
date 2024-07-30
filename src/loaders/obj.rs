@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, mesh::Mesh, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
-
+#[allow(clippy::result_unit_err)]
 pub fn load_obj(
     model_name: String,
     assets: &mut AssetLibrary

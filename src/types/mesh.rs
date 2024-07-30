@@ -1,6 +1,5 @@
-use std::{borrow::BorrowMut, cell::{Cell, RefCell}, collections::HashMap, sync::{mpsc::{self, Receiver, Sender}, Arc}, thread::{self}};
+use std::{borrow::BorrowMut, cell::RefCell, collections::HashMap, sync::{mpsc::{self, Receiver, Sender}, Arc}, thread::{self}};
 
-use gltf::mesh::util::indices;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, DrawIndirectCommand, PrimaryAutoCommandBuffer}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, device::Device, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}, pipeline::{Pipeline, PipelineBindPoint}};
@@ -118,8 +117,8 @@ impl Mesh {
     }
 
     pub fn load_immidiate(&mut self, state: &State, vertices: Vec<VertexData>, indices: Vec<u32>) {
-        self.vertices = vertices.clone();
-        self.indices = indices.clone();
+        self.vertices.clone_from(&vertices);
+        self.indices.clone_from(&indices);
         self.vertex_buffer = Some(Arc::new(Buffer::from_iter(
             state.memory_allocators.standard_memory_allocator.clone(),
             BufferCreateInfo {

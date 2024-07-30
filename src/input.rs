@@ -20,6 +20,7 @@ pub struct InputManager {
     pub button_released: HashSet<MouseButton>,
 
     pub cursor_position: Vec2f,
+    pub scroll_delta: f32,
 
     mouse_pos: Vec2f,
     prev_mouse_pos: Option<Vec2f>,
@@ -45,7 +46,7 @@ impl InputManager {
     }
     
     pub fn process_button_press(&mut self, button: MouseButton) {
-        let already_there = self.button_down.insert(button.clone());
+        let already_there = self.button_down.insert(button);
         if already_there {
             self.button_pressed.insert(button);
         }
@@ -73,6 +74,7 @@ impl InputManager {
         self.button_pressed.clear();
         self.button_released.clear();
         self.prev_mouse_pos = Some(self.mouse_pos);
+        self.scroll_delta = 0.0;
     }
 
     pub fn new() -> InputManager {
@@ -84,6 +86,7 @@ impl InputManager {
             button_pressed: HashSet::new(),
             button_released: HashSet::new(), 
             cursor_position: Vec2f::new([0.0, 0.0]),
+            scroll_delta: 0.0,
             mouse_pos: Vec2f::new([0.0, 0.0]),
             prev_mouse_pos: None,
         }
@@ -100,7 +103,7 @@ impl Default for InputManager {
     }
 }
 
-struct InputManagerUpdater {}
+pub struct InputManagerUpdater {}
 
 impl System for InputManagerUpdater {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{asset_library::AssetLibrary, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, model::Model, shader::{Shader, ShaderType}, texture::Texture, vectors::Vec2f}, ui::ui_layout::{Anchor, UiElement, UiElementType, UiElements}};
+use crate::{asset_library::AssetLibrary, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, model::Model, shader::{Shader, ShaderType}, texture::Texture, vectors::Vec2f}, ui::ui_layout::{Anchor, UiElement, UiElementType}};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -53,7 +53,7 @@ pub struct AssetDescriptions {
     pub textures: Vec<TextureDescription>,
     pub models: Vec<ModelDescription>,
     pub materials: Vec<MaterialDescription>,
-    pub ui_layouts: Vec<UiElementDescription>
+    pub ui_elements: Vec<UiElementDescription>
 }
 
 impl AssetDescriptions {
@@ -110,16 +110,17 @@ impl AssetDescriptions {
             map
         };
         
-        let ui: UiElements = {
-            let mut vec = Vec::new();
-            for ui_element_desc in self.ui_layouts.iter() {
+        let ui: HashMap<Uuid, UiElement> = {
+            let mut map = HashMap::new();
+            for ui_element_desc in self.ui_elements.iter() {
                 let material_uuid = materials.iter().find(|(_, material)| material.name == ui_element_desc.material)
                     .expect("Material not found").0;
-                vec.push(
+                map.insert(
+                    Uuid::new_v4(),
                     UiElement::new(&ui_element_desc.name, ui_element_desc.element_type, *material_uuid, ui_element_desc.screen_anchor, ui_element_desc.position, ui_element_desc.width, ui_element_desc.height)
                 );
             }
-            UiElements { elements: vec }
+            map
         };
 
         AssetLibrary {

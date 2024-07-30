@@ -1,20 +1,16 @@
-use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
-use std::usize;
 
 use bytemuck::{Pod, Zeroable};
 
-use log::{debug, error};
+use log::error;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, DrawIndirectCommand,
-    PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
 };
 use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::
@@ -56,10 +52,8 @@ use crate::state::State;
 use crate::types::camera::Camera;
 use crate::types::material::RenderingType;
 use crate::types::matrices::*;
-use crate::types::mesh::{DynamicMesh, DynamicMeshRenderingComponent};
-use crate::types::model::ModelComponent;
+use crate::types::mesh::DynamicMeshRenderingComponent;
 use crate::types::shader::{Shader, ShaderType};
-use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
 use crate::ui::ui_layout::UiVertexData;
 use crate::ui::ui_rendering::UiRenderingComponent;
@@ -165,7 +159,6 @@ pub struct Renderer {
     pub frames_in_flight: usize,
 
     pub fences: Vec<Fence>,
-    pub mesh_cache: Vec<Vec<(Arc<Subbuffer<[VertexData]>>, Arc<Subbuffer<[u32]>>)>>,
     pub previous_fence: usize,
 
     pub pipelines: HashMap<PipelineIdentifier, Arc<GraphicsPipeline>>,
@@ -208,7 +201,7 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
 
 fn get_framebuffers(
     device: Arc<Device>,
-    images: &Vec<Arc<Image>>,
+    images: &[Arc<Image>],
     render_pass: Arc<RenderPass>,
 ) -> Vec<Arc<Framebuffer>> {
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
@@ -601,7 +594,6 @@ impl Renderer {
                 Box::new(DynamicMeshRenderingComponent { dynamic_mesh_data: RefCell::new(HashMap::new()) }),
                 Box::new(UiRenderingComponent {})
             ],
-            mesh_cache: vec![Vec::new(); frames_in_flight],
             anisotropic: Some(context.physical_device.properties().max_sampler_anisotropy)
         }
     }

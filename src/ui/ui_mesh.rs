@@ -17,10 +17,10 @@ pub struct UiMesh {
 
 impl UiMesh {
     pub fn new(vertices: Vec<UiVertexData>, indices: Vec<u32>) -> UiMesh {
-        if vertices.len() == 0 {
+        if vertices.is_empty() {
             panic!("Empty vertex list not allowed!");
         }
-        if indices.len() == 0 {
+        if indices.is_empty() {
             panic!("Empty index list not allowed!");
         }
         if *indices.iter().max().unwrap() as usize >= vertices.len() {

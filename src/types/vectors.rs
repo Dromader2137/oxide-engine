@@ -565,6 +565,12 @@ impl Vec3d {
     }
 }
 
+impl From<Vec4f> for Vec3f {
+    fn from(value: Vec4f) -> Self {
+        Vec3f::new([value.x, value.y, value.z])
+    }
+}
+
 impl Vec4f {
     pub fn new(val: [f32; 4]) -> Vec4f {
         Vec4f {

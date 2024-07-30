@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use asset_descriptions::AssetDescriptions;
 use ecs::World;
-use input::InputManager;
+use input::{InputManager, InputManagerUpdater};
 use log::trace;
 use physics::rigidbody::RigidbodyHandler;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
@@ -33,6 +33,7 @@ use ui::ui_layout::{UiHandler, UiMeshBuilder};
 use vulkan::context::VulkanContext;
 use vulkan::memory::MemoryAllocators;
 use winit::event::DeviceEvent::MouseMotion;
+use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent::{self, MouseInput}};
 use winit::event_loop::ControlFlow;
@@ -83,6 +84,7 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
     world.add_system(DefaultTextureLoader {});
     world.add_system(RigidbodyHandler {});
     world.add_system(UiHandler {});
+    world.add_system(InputManagerUpdater {});
 
     world.start(&mut assets, &mut state);
 
@@ -146,6 +148,19 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
                 state.input.mouse_motion(Vec2f::new([x as f32, y as f32]));
             }
             Event::WindowEvent {
+                event: WindowEvent::MouseWheel { 
+                    delta, 
+                    .. 
+                }, 
+                ..
+            } => {
+                let y = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(val) => val.y as f32
+                };
+                state.input.scroll_delta = y;
+            }
+            Event::WindowEvent {
                 event:
                     WindowEvent::CursorMoved {
                         device_id: _,
@@ -165,8 +180,6 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
                 state.time = current_time;
 
                 world.update(&mut assets, &mut state);
-
-                state.input.clear_temp();
             }
             _ => (),
         })

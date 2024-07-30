@@ -49,11 +49,7 @@ fn select_physical_device(
 
             debug!("Selected queues main:{:?}, transfer:{:?}", gq, tq);
 
-            if gq.is_some() {
-                Some((p, gq.unwrap(), tq))
-            } else {
-                None
-            }
+            gq.map(|gq| (p, gq, tq))
         })
         .min_by_key(|(p, _, _)| match p.properties().device_type {
             PhysicalDeviceType::DiscreteGpu => 0,
