@@ -3,7 +3,18 @@ use crate::{ecs::System, types::{transform::Transform, vectors::Vec3f}};
 #[derive(Debug, Clone)]
 pub struct Rigidbody {
     pub mass: f32,
-    pub velocity: Vec3f
+    pub velocity: Vec3f,
+    pub angular_velocity: Vec3f,
+}
+
+impl Rigidbody {
+    pub fn new(m: f32, v: Vec3f, w: Vec3f) -> Rigidbody {
+        Rigidbody { 
+            mass: m, 
+            velocity: v, 
+            angular_velocity: w, 
+        }
+    }
 }
 
 pub struct RigidbodyHandler {}

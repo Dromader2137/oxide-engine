@@ -17,37 +17,37 @@ pub struct Quat {
 impl Quat {
     pub fn new(val: [f32; 4]) -> Quat {
         Quat {
-            x: val[0],
-            y: val[1],
-            z: val[2],
-            w: val[3]
+            w: val[0],
+            x: val[1],
+            y: val[2],
+            z: val[3]
         }
     }
     
     pub fn new_sl(val: [f32; 4]) -> Quat {
         Quat {
-            x: val[3],
-            y: val[0],
-            z: val[1],
-            w: val[2]
+            w: val[3],
+            x: val[0],
+            y: val[1],
+            z: val[2]
         }
     }
 
     pub fn inv(&self) -> Quat {
         Quat::new([
-            self.x,
+            self.w,
+            -self.x,
             -self.y,
             -self.z,
-            -self.w
         ])
     }
 
     pub fn to_matrix(&self) -> Matrix4f {
         let q = self.normalize();
-        let qr = q.x;
-        let qi = q.y;
+        let qr = q.w;
+        let qi = q.x;
         let qj = q.z;
-        let qk = q.w;
+        let qk = q.y;
 
         Matrix4f([
             [1.0-2.0*(qj*qj + qk*qk), 2.0*(qi*qk + qj*qr),     2.0*(qi*qj - qk*qr),     0.0],
@@ -58,20 +58,20 @@ impl Quat {
     }
 
     pub fn from_euler(e: Vec3f) -> Quat {
-        let cu = (e.x / 2.0).cos();
-        let cw = (e.y / 2.0).cos();
-        let cv = (e.z / 2.0).cos();
+        let cr = (e.x / 2.0).cos();
+        let cy = (e.y / 2.0).cos();
+        let cp = (e.z / 2.0).cos();
         
-        let su = (e.x / 2.0).sin();
-        let sw = (e.y / 2.0).sin();
-        let sv = (e.z / 2.0).sin();
+        let sr = (e.x / 2.0).sin();
+        let sy = (e.y / 2.0).sin();
+        let sp = (e.z / 2.0).sin();
 
         Quat {
-            x: cu*cv*cw + su*sv*sw,
-            y: su*cv*cw - cu*sv*sw,
-            z: cu*sv*cw + su*cv*sw,
-            w: cu*cv*sw - su*sv*cw
-        }
+            w: cr*cy*cp + sr*sy*sp,
+            x: sr*cy*cp - cr*sy*sp,
+            y: cr*sy*cp - sr*cy*sp,
+            z: cr*cy*sp + sr*sy*cp,
+        }.normalize()
     }
 
     pub fn length_sqr(&self) -> f32 {
@@ -84,7 +84,7 @@ impl Quat {
 
     pub fn normalize(&self) -> Quat {
         let len = self.length();
-        Quat::new([self.x / len, self.y / len, self.z / len, self.w / len])
+        Quat::new([self.w / len, self.x / len, self.y / len, self.z / len])
     }
 }
 
@@ -93,10 +93,97 @@ impl Mul for Quat {
     type Output = Quat;
     fn mul(self, rhs: Self) -> Self::Output {
         Quat::new([
-            self.x*rhs.x - self.y*rhs.y - self.z*rhs.z - self.w*rhs.w,
-            self.x*rhs.y + self.y*rhs.x - self.z*rhs.w + self.w*rhs.z,
-            self.x*rhs.z + self.y*rhs.w + self.z*rhs.x - self.w*rhs.y,
-            self.x*rhs.w - self.y*rhs.z + self.z*rhs.y + self.w*rhs.x,
+            self.w*rhs.w - self.x*rhs.x - self.z*rhs.z - self.y*rhs.y,
+            self.w*rhs.x + self.x*rhs.w + self.z*rhs.y - self.y*rhs.z,
+            self.w*rhs.y + self.x*rhs.z - self.z*rhs.x + self.y*rhs.w,
+            self.w*rhs.z - self.x*rhs.y + self.z*rhs.w + self.y*rhs.x,
         ])
+    }
+}
+
+impl Mul<Vec3f> for Quat {
+    type Output = Vec3f;
+    fn mul(self, rhs: Vec3f) -> Vec3f {
+        let p = Quat::new([0.0, rhs.x, rhs.y, rhs.z]);
+        let pp = self * p * self.inv();
+        Vec3f::new([pp.x, pp.y, pp.z])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+    use nalgebra::UnitQuaternion;
+
+    use crate::types::{quaternion::Quat, vectors::Vec3f};
+
+    extern crate nalgebra as na;
+
+    #[test]
+    fn test_quat_from_euler_na() {
+        let my_quat = Quat::from_euler(Vec3f::new([0.0, 0.4, 0.0]));
+        let na_quat = UnitQuaternion::from_euler_angles(0.0, 0.4, 0.0);
+       
+        assert_eq!([na_quat.i, na_quat.j, na_quat.k, na_quat.w], 
+                   [my_quat.x, my_quat.y, my_quat.z, my_quat.w]);
+    }
+
+    #[test]
+    fn test_quat_from_euler_y() {
+        let my_quat = Quat::from_euler(Vec3f::new([0.0, 0.4, 0.0]));
+       
+        assert_relative_eq!(my_quat.x, 0.0);
+        assert_relative_eq!(my_quat.y, 0.199, epsilon=1e-3);
+        assert_relative_eq!(my_quat.z, 0.0);
+        assert_relative_eq!(my_quat.w, 0.98, epsilon=1e-3);
+    }
+    
+    #[test]
+    fn test_quat_from_euler_x() {
+        let my_quat = Quat::from_euler(Vec3f::new([0.4, 0.0, 0.0]));
+       
+        assert_relative_eq!(my_quat.x, 0.199, epsilon=1e-3);
+        assert_relative_eq!(my_quat.y, 0.0);
+        assert_relative_eq!(my_quat.z, 0.0);
+        assert_relative_eq!(my_quat.w, 0.98, epsilon=1e-3);
+    }
+    
+    #[test]
+    fn test_quat_from_euler_z() {
+        let my_quat = Quat::from_euler(Vec3f::new([0.0, 0.0, 0.4]));
+       
+        assert_relative_eq!(my_quat.x, 0.0);
+        assert_relative_eq!(my_quat.y, 0.0);
+        assert_relative_eq!(my_quat.z, 0.199, epsilon=1e-3);
+        assert_relative_eq!(my_quat.w, 0.98, epsilon=1e-3);
+    }
+
+
+    #[test]
+    fn test_quat_mul_na() {
+        let my_quat_1 = Quat::from_euler(Vec3f::new([0.1, 1.6, 0.4]));
+        let na_quat_1 = UnitQuaternion::from_euler_angles(0.1, 0.4, 1.6);
+
+        let my_quat_2 = Quat::from_euler(Vec3f::new([-0.3, 0.6, -1.4]));
+        let na_quat_2 = UnitQuaternion::from_euler_angles(-0.3, -1.4, 0.6);
+
+        let my_quat = my_quat_1 * my_quat_2;
+        let na_quat = na_quat_1 * na_quat_2;
+
+        assert_relative_eq!(my_quat.x, na_quat.i);
+        assert_relative_eq!(my_quat.y, na_quat.k);
+        assert_relative_eq!(my_quat.z, na_quat.j);
+        assert_relative_eq!(my_quat.w, na_quat.w);
+    }
+    
+    #[test]
+    fn test_quat_vec_mul() {
+        let my_quat = Quat::from_euler(Vec3f::new([0.0, 0.4, 0.0]));
+        let my_vec_base = Vec3f::new([0.0, 1.0, 0.0]);
+        let my_vec = my_quat * my_vec_base;
+
+        assert_relative_eq!(my_vec.y, 1.0);
+        assert_relative_eq!(my_vec.x, 0.0);
+        assert_relative_eq!(my_vec.z, 0.0);
     }
 }

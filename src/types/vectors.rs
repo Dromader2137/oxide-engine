@@ -1,7 +1,6 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use bytemuck::{Pod, Zeroable};
-use log::debug;
 use serde::{Deserialize, Serialize};
 
 use super::quaternion::Quat;
@@ -605,9 +604,6 @@ impl Mul<Quat> for Vec3f {
     fn mul(self, rhs: Quat) -> Self::Output {
         let p = Quat::new([0.0, self.x, self.y, self.z]);
         let pp = rhs.inv() * p * rhs;
-        if pp.x > 0.00001 {
-            debug!("{:?} {:?}", self, pp);
-        }
-        Vec3f::new([pp.y, pp.z, pp.w])
+        Vec3f::new([pp.x, pp.y, pp.z])
     }
 }
