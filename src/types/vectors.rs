@@ -408,11 +408,11 @@ impl Vec2f {
         }
     }
 
-    pub fn dot(&mut self, vec: Vec2f) -> f32 {
+    pub fn dot(&self, vec: Vec2f) -> f32 {
         self.x * vec.x + self.y * vec.y
     }
 
-    pub fn cross(&mut self, vec: Vec2f) -> f32 {
+    pub fn cross(&self, vec: Vec2f) -> f32 {
         (self.x * vec.y) - (self.y * vec.x)
     }
 }
@@ -444,11 +444,11 @@ impl Vec3f {
         }
     }
 
-    pub fn dot(&mut self, vec: Vec3f) -> f32 {
+    pub fn dot(&self, vec: Vec3f) -> f32 {
         self.x * vec.x + self.y * vec.y + self.z * vec.z
     }
 
-    pub fn cross(&mut self, vec: Vec3f) -> Vec3f {
+    pub fn cross(&self, vec: Vec3f) -> Vec3f {
         Vec3f {
             x: (self.y * vec.z) - (self.z * vec.y),
             y: (self.z * vec.x) - (self.x * vec.z),
@@ -457,15 +457,15 @@ impl Vec3f {
         }
     }
 
-    pub fn length_sqr(&mut self) -> f32 {
+    pub fn length_sqr(&self) -> f32 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    pub fn length(&mut self) -> f32 {
+    pub fn length(&self) -> f32 {
         self.length_sqr().sqrt()
     }
 
-    pub fn normalize(&mut self) -> Vec3f {
+    pub fn normalize(&self) -> Vec3f {
         let len = self.length();
         Vec3f {
             x: self.x / len,
@@ -499,11 +499,11 @@ impl Vec2d {
         }
     }
 
-    pub fn dot(&mut self, vec: Vec2d) -> f64 {
+    pub fn dot(&self, vec: Vec2d) -> f64 {
         self.x * vec.x + self.y * vec.y
     }
 
-    pub fn cross(&mut self, vec: Vec2d) -> f64 {
+    pub fn cross(&self, vec: Vec2d) -> f64 {
         (self.x * vec.y) - (self.y * vec.x)
     }
 }
@@ -534,11 +534,11 @@ impl Vec3d {
         }
     }
 
-    pub fn dot(&mut self, vec: Vec3d) -> f64 {
+    pub fn dot(&self, vec: Vec3d) -> f64 {
         self.x * vec.x + self.y * vec.y + self.z * vec.z
     }
 
-    pub fn cross(&mut self, vec: Vec3d) -> Vec3d {
+    pub fn cross(&self, vec: Vec3d) -> Vec3d {
         Vec3d {
             x: (self.y * vec.z) - (self.z * vec.y),
             y: (self.z * vec.x) - (self.x * vec.z),
@@ -546,15 +546,15 @@ impl Vec3d {
         }
     }
 
-    pub fn length_sqr(&mut self) -> f64 {
+    pub fn length_sqr(&self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    pub fn length(&mut self) -> f64 {
+    pub fn length(&self) -> f64 {
         self.length_sqr().sqrt()
     }
 
-    pub fn normalize(&mut self) -> Vec3d {
+    pub fn normalize(&self) -> Vec3d {
         let len = self.length();
         Vec3d {
             x: self.x / len,
@@ -580,15 +580,15 @@ impl Vec4f {
         }
     }
     
-    pub fn length_sqr_xyz(&mut self) -> f32 {
+    pub fn length_sqr_xyz(&self) -> f32 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
     
-    pub fn length_xyz(&mut self) -> f32 {
+    pub fn length_xyz(&self) -> f32 {
         self.length_sqr_xyz().sqrt()
     }
     
-    pub fn normalize_xyz(&mut self) -> Vec4f {
+    pub fn normalize_xyz(&self) -> Vec4f {
         let len = self.length_xyz();
         Vec4f {
             x: self.x / len,

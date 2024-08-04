@@ -1,4 +1,4 @@
-use std::ops::Mul;
+use std::ops::{Add, Mul};
 
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
@@ -88,6 +88,12 @@ impl Quat {
     }
 }
 
+impl Add for Quat {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Quat::new([self.w + rhs.w, self.x + rhs.x, self.y + rhs.y, self.z + rhs.z])
+    }
+}
 
 impl Mul for Quat {
     type Output = Quat;
@@ -107,6 +113,13 @@ impl Mul<Vec3f> for Quat {
         let p = Quat::new([0.0, rhs.x, rhs.y, rhs.z]);
         let pp = self * p * self.inv();
         Vec3f::new([pp.x, pp.y, pp.z])
+    }
+}
+
+impl Mul<f32> for Quat {
+    type Output = Quat;
+    fn mul(self, rhs: f32) -> Quat {
+        Quat::new([self.w * rhs, self.x * rhs, self.y * rhs, self.z * rhs])
     }
 }
 
