@@ -17,6 +17,7 @@ use asset_descriptions::AssetDescriptions;
 use ecs::World;
 use input::{InputManager, InputManagerUpdater};
 use log::trace;
+use physics::collision_handler::CollisionHandler;
 use physics::rigidbody::RigidbodyHandler;
 use rendering::{EventLoop, Renderer, RendererHandler, Window};
 use state::State;
@@ -37,6 +38,13 @@ use winit::event::MouseScrollDelta;
 use winit::event::WindowEvent::KeyboardInput;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent::{self, MouseInput}};
 use winit::event_loop::ControlFlow;
+
+pub use winit;
+pub use vulkano;
+pub use hecs;
+pub use log;
+pub use uuid;
+pub use image;
 
 pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
     env_logger::init();
@@ -83,6 +91,7 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
     world.add_system(RendererHandler {});
     world.add_system(DefaultTextureLoader {});
     world.add_system(RigidbodyHandler {});
+    world.add_system(CollisionHandler {});
     world.add_system(UiHandler {});
     world.add_system(InputManagerUpdater {});
 
