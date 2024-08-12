@@ -1,9 +1,8 @@
-use hecs::Entity;
 use log::debug;
 
 use crate::{ecs::System, types::transform::Transform};
 
-use super::collider::{sphere_to_sphere, Collider};
+use super::{collider::{sphere_to_sphere, Collider}, rigidbody::Rigidbody};
 
 pub struct CollisionHandler {}
 
@@ -26,16 +25,16 @@ impl System for CollisionHandler {
         let mut collisions = Vec::new();
         
         {
-            let mut query = entities.query::<(&Transform, &Collider)>();
+            let mut query = entities.query::<(&Transform, &Rigidbody, &Collider)>();
             let vec = query.iter().map(|(e, x)| (e, x)).collect::<Vec<_>>();
 
-            for (a, (t1, c1)) in vec.iter() {
-                for (b, (t2, c2)) in vec.iter() {
+            for (a, (ta, ra, ca)) in vec.iter() {
+                for (b, (tb, rb, cb)) in vec.iter() {
                     if a <= b { continue; }
 
-                    match (c1, c2) {
+                    match (ca, cb) {
                         (Collider::Sphere(a_r), Collider::Sphere(b_r)) => {
-                            if let Some(collision) = sphere_to_sphere(*a, *a_r, t1, *b, *b_r, t2) {
+                            if let Some(collision) = sphere_to_sphere((*a, ta, ra, *a_r), (*b, tb, rb, *b_r)) {
                                 collisions.push(collision);
                             }
                         }
@@ -45,10 +44,13 @@ impl System for CollisionHandler {
         }
 
         for collision in collisions.iter() {
-            // let a = entities.query_one::<(&Transform)>(collision.entity_a).unwrap();
-            // let b = entities.query_one::<(&Transform)>(collision.entity_b).unwrap();
+            let mut a = entities.query_one::<&mut Transform>(collision.entity_a).unwrap();
+            let mut b = entities.query_one::<&mut Transform>(collision.entity_b).unwrap();
 
-            debug!("{} {}", collision.entity_a.id(), collision.entity_b.id());
+            a.get().unwrap().position += collision.move_a;
+            b.get().unwrap().position += collision.move_b;
+
+            debug!("{} {} {:?} {:?}", collision.entity_a.id(), collision.entity_b.id(), collision.move_a, collision.move_b);
         }
     }
 }
