@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 vulkano = { version = "0.34.1", features = ["document_unchecked"] }
-winit = { version = "0.29.15", features = ["rwh_05"] }
+winit = { version = "0.30.5", features = ["rwh_05"] }
 ron = "0.8"
 rmp-serde = "1.3.0"
 serde = { version = "1", features = ["derive"] }

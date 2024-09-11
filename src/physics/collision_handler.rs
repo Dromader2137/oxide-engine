@@ -26,7 +26,7 @@ impl System for CollisionHandler {
         
         {
             let mut query = entities.query::<(&Transform, &Rigidbody, &Collider)>();
-            let vec = query.iter().map(|(e, x)| (e, x)).collect::<Vec<_>>();
+            let vec = query.iter().collect::<Vec<_>>();
 
             for (a, (ta, ra, ca)) in vec.iter() {
                 for (b, (tb, rb, cb)) in vec.iter() {

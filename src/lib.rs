@@ -9,6 +9,7 @@ pub mod loaders;
 pub mod vulkan;
 pub mod ui;
 pub mod physics;
+pub mod assets;
 
 use std::fs;
 use std::time::Instant;
