@@ -610,9 +610,9 @@ impl System for RendererHandler {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
         trace!(" 1");
-        handle_possible_resize(world, assets, state);
-        trace!(" 2");
         render(world, assets, state);
+        trace!(" 2");
+        handle_possible_resize(world, assets, state);
         trace!(" 3");
     }
 }

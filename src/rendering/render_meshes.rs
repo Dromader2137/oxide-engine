@@ -1,11 +1,29 @@
-use vulkano::{buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, BufferUsage, Subbuffer}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, memory::allocator::MemoryTypeFilter, pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint}};
+use vulkano::{
+    buffer::{
+        allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
+        BufferUsage, Subbuffer,
+    },
+    descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet},
+    memory::allocator::MemoryTypeFilter,
+    pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint},
+};
 
-use crate::{asset_library::AssetLibrary, state::State, types::{material::{Attachment, Material}, mesh::DynamicMesh, transform::{ModelData, Transform}}, vulkan::memory::MemoryAllocators};
+use crate::{
+    asset_library::AssetLibrary,
+    state::State,
+    types::{
+        material::{Attachment, Material},
+        mesh::DynamicMesh,
+        model::ModelComponent,
+        transform::{ModelData, Transform},
+    },
+    vulkan::memory::MemoryAllocators,
+};
 
 use super::{rendering_component::RenderingComponent, Matrix4f, PipelineIdentifier};
 
 pub struct MeshRenderingComponent {
-    model_allocator: SubbufferAllocator
+    model_allocator: SubbufferAllocator,
 }
 
 impl MeshRenderingComponent {
@@ -15,20 +33,20 @@ impl MeshRenderingComponent {
                 allocators.standard_memory_allocator.clone(),
                 SubbufferAllocatorCreateInfo {
                     buffer_usage: BufferUsage::STORAGE_BUFFER,
-                    memory_type_filter: MemoryTypeFilter::PREFER_HOST |
-                        MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
-                }
-            )
+                },
+            ),
         }
     }
 }
 
 fn get_descriptor_sets(
-    state: &State, 
+    state: &State,
     assets: &AssetLibrary,
-    material: &Material, 
-    pipeline: &GraphicsPipeline, 
+    material: &Material,
+    pipeline: &GraphicsPipeline,
     model: &Subbuffer<ModelData>,
     image_id: usize,
 ) -> Vec<std::sync::Arc<PersistentDescriptorSet>> {
@@ -46,10 +64,7 @@ fn get_descriptor_sets(
     let m_set = PersistentDescriptorSet::new(
         state.memory_allocators.descriptor_set_allocator.as_ref(),
         pipeline.layout().set_layouts().get(1).unwrap().clone(),
-        [WriteDescriptorSet::buffer(
-            0,
-            model.clone(),
-        )],
+        [WriteDescriptorSet::buffer(0, model.clone())],
         [],
     )
     .unwrap();
@@ -158,7 +173,7 @@ impl RenderingComponent for MeshRenderingComponent {
             let model = ModelData {
                 translation: Matrix4f::translation((transform.position - camera_pos).to_vec3f()),
                 rotation: transform.rotation.to_matrix(),
-                scale: Matrix4f::scale(transform.scale)
+                scale: Matrix4f::scale(transform.scale),
             };
             let model_buffer = self.model_allocator.allocate_sized().unwrap();
             *model_buffer.write().unwrap() = model;
@@ -191,20 +206,20 @@ impl RenderingComponent for MeshRenderingComponent {
                 ))
                 .unwrap();
 
-            let descriptor_sets = get_descriptor_sets(
-                state, 
-                assets, 
-                material, 
-                pipeline, 
-                &model_buffer, 
-                image_id 
-            );
+            let descriptor_sets =
+                get_descriptor_sets(state, assets, material, pipeline, &model_buffer, image_id);
 
             builder
                 .bind_pipeline_graphics(pipeline.clone())
                 .expect("GP bind faild");
             builder
-                .bind_descriptor_sets(PipelineBindPoint::Graphics, pipeline.layout().clone(), 0, descriptor_sets).unwrap();
+                .bind_descriptor_sets(
+                    PipelineBindPoint::Graphics,
+                    pipeline.layout().clone(),
+                    0,
+                    descriptor_sets,
+                )
+                .unwrap();
             builder
                 .bind_index_buffer(index_buffer.clone())
                 .expect("Index buffer bind failed");
@@ -214,6 +229,70 @@ impl RenderingComponent for MeshRenderingComponent {
             builder
                 .draw_indexed(mesh.indices.len() as u32, 1, 0, 0, 0)
                 .expect("Draw failed");
+        }
+
+        for (_, (model_comp, transform)) in entities.query::<(&ModelComponent, &Transform)>().iter() {
+            let model = assets.models.get(&model_comp.model_uuid).unwrap();
+            for (mesh_uuid, material_uuid) in model.meshes_and_materials.iter() {
+                let model = ModelData {
+                    translation: Matrix4f::translation(
+                        (transform.position - camera_pos).to_vec3f(),
+                    ),
+                    rotation: transform.rotation.to_matrix(),
+                    scale: Matrix4f::scale(transform.scale),
+                };
+                let model_buffer = self.model_allocator.allocate_sized().unwrap();
+                *model_buffer.write().unwrap() = model;
+
+                let mesh = assets.meshes.get(mesh_uuid).expect("Mesh not found");
+                let vertex_buffer = mesh
+                    .vertex_buffer
+                    .as_ref()
+                    .expect("Vertex buffer not found")
+                    .as_ref();
+                let index_buffer = mesh
+                    .index_buffer
+                    .as_ref()
+                    .expect("Index buffer not found")
+                    .as_ref();
+                let material = assets
+                    .materials
+                    .get(material_uuid)
+                    .expect("Material not found");
+                let pipeline = state
+                    .renderer
+                    .pipelines
+                    .get(&PipelineIdentifier::new(
+                        material.vertex_shader,
+                        material.fragment_shader,
+                        material.rendering_type,
+                    ))
+                    .unwrap();
+
+                let descriptor_sets =
+                    get_descriptor_sets(state, assets, material, pipeline, &model_buffer, image_id);
+
+                builder
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .expect("GP bind faild");
+                builder
+                    .bind_descriptor_sets(
+                        PipelineBindPoint::Graphics,
+                        pipeline.layout().clone(),
+                        0,
+                        descriptor_sets,
+                    )
+                    .unwrap();
+                builder
+                    .bind_index_buffer(index_buffer.clone())
+                    .expect("Index buffer bind failed");
+                builder
+                    .bind_vertex_buffers(0, vertex_buffer.clone())
+                    .expect("Vertex buffer bind failed");
+                builder
+                    .draw_indexed(mesh.indices.len() as u32, 1, 0, 0, 0)
+                    .expect("Draw failed");
+            }
         }
 
         builder
