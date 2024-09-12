@@ -49,7 +49,7 @@ impl System for RigidbodyHandler {
             rigidbody.force = Vec3f::new([0.0, 0.0, 0.0]);
 
             let delta_pos = rigidbody.velocity.to_vec3d() * state.delta_time * state.physics_time_scale as f64;
-            transform.position += delta_pos;
+            transform.position += delta_pos.into();
 
             rigidbody.angular_velocity += rigidbody.torque * state.delta_time as f32 / rigidbody.mass;
             rigidbody.torque = Vec3f::new([0.0, 0.0, 0.0]);

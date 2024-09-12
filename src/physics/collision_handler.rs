@@ -47,8 +47,8 @@ impl System for CollisionHandler {
             let mut a = entities.query_one::<&mut Transform>(collision.entity_a).unwrap();
             let mut b = entities.query_one::<&mut Transform>(collision.entity_b).unwrap();
 
-            a.get().unwrap().position += collision.move_a;
-            b.get().unwrap().position += collision.move_b;
+            a.get().unwrap().position += collision.move_a.into();
+            b.get().unwrap().position += collision.move_b.into();
 
             debug!("{} {} {:?} {:?}", collision.entity_a.id(), collision.entity_b.id(), collision.move_a, collision.move_b);
         }

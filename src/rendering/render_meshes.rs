@@ -171,7 +171,7 @@ impl RenderingComponent for MeshRenderingComponent {
         let entities = world.entities.borrow();
         for (_, (dyn_mesh, transform)) in entities.query::<(&DynamicMesh, &Transform)>().iter() {
             let model = ModelData {
-                translation: Matrix4f::translation((transform.position - camera_pos).to_vec3f()),
+                translation: Matrix4f::translation((transform.position - camera_pos).into()),
                 rotation: transform.rotation.to_matrix(),
                 scale: Matrix4f::scale(transform.scale),
             };
@@ -236,7 +236,7 @@ impl RenderingComponent for MeshRenderingComponent {
             for (mesh_uuid, material_uuid) in model.meshes_and_materials.iter() {
                 let model = ModelData {
                     translation: Matrix4f::translation(
-                        (transform.position - camera_pos).to_vec3f(),
+                        (transform.position - camera_pos).into(),
                     ),
                     rotation: transform.rotation.to_matrix(),
                     scale: Matrix4f::scale(transform.scale),

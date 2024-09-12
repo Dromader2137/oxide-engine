@@ -26,8 +26,8 @@ pub fn sphere_to_sphere(
 
     if dst <= 0.0 {
         let total_mass = a.2.mass + b.2.mass;
-        let move_a_norm = (a.1.position - b.1.position) / dst_centers;
-        let move_b_norm = (b.1.position - a.1.position) / dst_centers;
+        let move_a_norm: Vec3d = ((a.1.position - b.1.position) / dst_centers).into();
+        let move_b_norm: Vec3d = ((b.1.position - a.1.position) / dst_centers).into();
         let move_a = move_a_norm * (b.2.mass / total_mass) as f64 * -dst;
         let move_b = move_b_norm * (a.2.mass / total_mass) as f64 * -dst;
 

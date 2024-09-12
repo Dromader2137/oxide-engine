@@ -8,3 +8,4 @@ pub mod material;
 pub mod texture;
 pub mod model;
 pub mod quaternion;
+pub mod position;

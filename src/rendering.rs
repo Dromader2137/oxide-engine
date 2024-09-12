@@ -51,6 +51,7 @@ use crate::state::State;
 use crate::types::camera::Camera;
 use crate::types::material::RenderingType;
 use crate::types::matrices::*;
+use crate::types::position::Position;
 use crate::types::shader::{Shader, ShaderType};
 use crate::types::vectors::*;
 use crate::ui::ui_layout::UiVertexData;
@@ -150,7 +151,7 @@ pub struct Renderer {
     pub viewport: Viewport,
 
     pub vp_data: VPData,
-    pub vp_pos: Vec3d,
+    pub vp_pos: Position,
     pub vp_buffers: Vec<Subbuffer<VPData>>,
 
     pub window_resized: bool,
@@ -577,7 +578,7 @@ impl Renderer {
             view: Matrix4f::indentity(),
             projection: Matrix4f::indentity(),
         };
-        let vp_pos = Vec3d::new([0.0, 0.0, 0.0]);
+        let vp_pos = Position::default();
 
         Renderer {
             render_pass,

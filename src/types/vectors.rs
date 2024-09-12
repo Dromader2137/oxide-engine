@@ -3,7 +3,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 
-use super::quaternion::Quat;
+use super::{position::Position, quaternion::Quat};
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C, align(16))]
@@ -42,6 +42,14 @@ pub struct Vec3d {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+}
+
+#[derive(Clone, Copy, Pod, Zeroable, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct Vec3i {
+    pub x: i64,
+    pub y: i64,
+    pub z: i64
 }
 
 impl Add for Vec2f {
@@ -95,6 +103,21 @@ impl Add for Vec3d {
 }
 
 impl AddAssign for Vec3d {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+    }
+}
+
+impl Add for Vec3i {
+    type Output = Vec3i;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec3i::new([self.x + rhs.x, self.y + rhs.y, self.z + rhs.z])
+    }
+}
+
+impl AddAssign for Vec3i {
     fn add_assign(&mut self, rhs: Self) {
         self.x += rhs.x;
         self.y += rhs.y;
@@ -218,6 +241,36 @@ impl DivAssign<f64> for Vec3d {
     }
 }
 
+impl Div for Vec3i {
+    type Output = Vec3i;
+    fn div(self, rhs: Self) -> Self::Output {
+        Vec3i::new([self.x / rhs.x, self.y / rhs.y, self.z / rhs.z])
+    }
+}
+
+impl Div<i64> for Vec3i {
+    type Output = Vec3i;
+    fn div(self, rhs: i64) -> Self::Output {
+        Vec3i::new([self.x / rhs, self.y / rhs, self.z / rhs])
+    }
+}
+
+impl DivAssign for Vec3i {
+    fn div_assign(&mut self, rhs: Self) {
+        self.x /= rhs.x;
+        self.y /= rhs.y;
+        self.z /= rhs.z;
+    }
+}
+
+impl DivAssign<i64> for Vec3i {
+    fn div_assign(&mut self, rhs: i64) {
+        self.x /= rhs;
+        self.y /= rhs;
+        self.z /= rhs;
+    }
+}
+
 impl Mul<f32> for Vec2f {
     type Output = Vec2f;
     fn mul(self, rhs: f32) -> Self::Output {
@@ -327,6 +380,36 @@ impl MulAssign<f64> for Vec3d {
     }
 }
 
+impl Mul for Vec3i {
+    type Output = Vec3i;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Vec3i::new([self.x * rhs.x, self.y * rhs.y, self.z * rhs.z])
+    }
+}
+
+impl Mul<i64> for Vec3i {
+    type Output = Vec3i;
+    fn mul(self, rhs: i64) -> Self::Output {
+        Vec3i::new([self.x * rhs, self.y * rhs, self.z * rhs])
+    }
+}
+
+impl MulAssign for Vec3i {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.x *= rhs.x;
+        self.y *= rhs.y;
+        self.z *= rhs.z;
+    }
+}
+
+impl MulAssign<i64> for Vec3i {
+    fn mul_assign(&mut self, rhs: i64) {
+        self.x *= rhs;
+        self.y *= rhs;
+        self.z *= rhs;
+    }
+}
+
 impl Sub for Vec2f {
     type Output = Vec2f;
     fn sub(self, rhs: Self) -> Self::Output {
@@ -369,6 +452,7 @@ impl SubAssign for Vec2d {
         self.y -= rhs.y;
     }
 }
+
 impl Sub for Vec3d {
     type Output = Vec3d;
     fn sub(self, rhs: Self) -> Self::Output {
@@ -377,6 +461,21 @@ impl Sub for Vec3d {
 }
 
 impl SubAssign for Vec3d {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+        self.z -= rhs.z;
+    }
+}
+
+impl Sub for Vec3i {
+    type Output = Vec3i;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec3i::new([self.x - rhs.x, self.y - rhs.y, self.z - rhs.z])
+    }
+}
+
+impl SubAssign for Vec3i {
     fn sub_assign(&mut self, rhs: Self) {
         self.x -= rhs.x;
         self.y -= rhs.y;
@@ -564,6 +663,24 @@ impl Vec3d {
     }
 }
 
+impl Vec3i {
+    pub fn new(val: [i64; 3]) -> Vec3i {
+        Vec3i {
+            x: val[0],
+            y: val[1],
+            z: val[2]
+        }
+    }
+    
+    pub fn length_sqr(&self) -> i64 {
+        self.x * self.x + self.y * self.y + self.z * self.z
+    }
+    
+    pub fn length(&self) -> f64 {
+        (self.length_sqr() as f64).sqrt()
+    }
+}
+
 impl From<Vec4f> for Vec3f {
     fn from(value: Vec4f) -> Self {
         Vec3f::new([value.x, value.y, value.z])
@@ -605,5 +722,23 @@ impl Mul<Quat> for Vec3f {
         let p = Quat::new([0.0, self.x, self.y, self.z]);
         let pp = rhs.inv() * p * rhs;
         Vec3f::new([pp.x, pp.y, pp.z])
+    }
+}
+
+impl From<Vec3i> for Vec3d {
+    fn from(value: Vec3i) -> Self {
+        Vec3d::new([value.x as f64, value.y as f64, value.z as f64])
+    }
+}
+
+impl From<Position> for Vec3d {
+    fn from(value: Position) -> Self {
+        value.position + value.chunk.into()
+    }
+}
+
+impl From<Position> for Vec3f {
+    fn from(value: Position) -> Self {
+        (value.position + value.chunk.into()).to_vec3f()
     }
 }
