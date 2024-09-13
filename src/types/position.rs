@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
 
 use serde::{Deserialize, Serialize};
 
-use super::vectors::{Vec3d, Vec3f, Vec3i};
+use super::vectors::{Vec3d, Vec3i};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[repr(C)]

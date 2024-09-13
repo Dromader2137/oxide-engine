@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
 
-use log::{error, trace};
+use log::{error, trace, warn};
 
 use render_meshes::MeshRenderingComponent;
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,7 @@ pub struct Window {
 impl Window {
     pub fn new(event_loop: &EventLoop) -> Window {
         Window {
+            #[allow(deprecated)]
             window_handle: Arc::new(event_loop.event_loop.create_window(winit::window::Window::default_attributes()).unwrap()),
         }
     }
@@ -425,7 +427,7 @@ fn recalculate_projection(world: &World, state: &mut State, new_dimensions: Phys
     );
 }
 
-fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut State) {
+fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut State) -> bool {
     if state.renderer.window_resized || state.renderer.recreate_swapchain {
         state.renderer.recreate_swapchain = false;
         state.renderer.window_resized = false;
@@ -452,11 +454,15 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
 
         recalculate_projection(world, state, new_dimensions);
         recreate_pipelines(assets, state);
+        true
+    } else {
+        false
     }
 }
 
 #[allow(clippy::arc_with_non_send_sync)]
 fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
+    if state.renderer.window_resized || state.renderer.recreate_swapchain { return; }
     let (image_i, suboptimal, acquire_future) =
         match swapchain::acquire_next_image(state.renderer.swapchain.clone(), None)
             .map_err(Validated::unwrap)
@@ -464,8 +470,9 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             Ok(r) => r,
             Err(VulkanError::OutOfDate) => {
                 state.renderer.recreate_swapchain = true;
+                warn!("Swapchain out of date");
                 return;
-            }
+            },
             Err(e) => panic!("failed to acquire next image: {e}"),
         };
 
@@ -473,7 +480,6 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
         state.renderer.recreate_swapchain = true;
     }
     
-    trace!("  1");
     let command_buffer = get_command_buffers(world, assets, state, image_i as usize);
     
     let previous_future = match state.renderer.fences[state.renderer.previous_fence].clone() {
@@ -486,12 +492,16 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             fence.boxed()
         }
     };
-    trace!("  2");
     
     if let Some(image_fence) = &state.renderer.fences[image_i as usize] {
-        image_fence.wait(None).unwrap();
+        match image_fence.wait(Some(Duration::from_secs(1))) {
+            Ok(_) => {},
+            Err(e) => {
+                error!("{}", e);
+                return;
+            }
+        }
     }
-    trace!("  3");
 
     {
         let mut contents = state
@@ -502,9 +512,7 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             .write()
             .unwrap();
         *contents = state.renderer.vp_data;
-        drop(contents);
     }
-    trace!("  4");
     
     let future = previous_future
         .join(acquire_future)
@@ -515,7 +523,6 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             SwapchainPresentInfo::swapchain_image_index(state.renderer.swapchain.clone(), image_i),
         )
         .then_signal_fence_and_flush();
-    trace!("  5");
     
     state.renderer.fences[image_i as usize] = match future.map_err(Validated::unwrap) {
         Ok(value) => Some(Arc::new(value)),
@@ -596,7 +603,6 @@ impl Renderer {
             vp_buffers,
             pipelines: HashMap::new(),
             rendering_components: vec![
-                // Box::new(DynamicMeshRenderingComponent { dynamic_mesh_data: RefCell::new(HashMap::new()) }),
                 Box::new(MeshRenderingComponent::new(memory_allocators)),
                 Box::new(UiRenderingComponent {})
             ],
@@ -610,10 +616,8 @@ pub struct RendererHandler {}
 impl System for RendererHandler {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        trace!(" 1");
-        render(world, assets, state);
-        trace!(" 2");
-        handle_possible_resize(world, assets, state);
-        trace!(" 3");
+        if !handle_possible_resize(world, assets, state) {
+            render(world, assets, state);
+        }
     }
 }

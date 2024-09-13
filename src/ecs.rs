@@ -40,20 +40,16 @@ impl World {
     }
 
     pub fn start(&mut self, assets: &mut AssetLibrary, state: &mut State) {
-        let mut i = 0;
-        for system in self.systems.iter() {
+        for (i, system) in self.systems.iter().enumerate() {
             trace!("{}", i);
             system.on_start(self, assets, state);
-            i += 1;
         }
     }
 
     pub fn update(&mut self, assets: &mut AssetLibrary, state: &mut State) {
-        let mut i = 0;
-        for system in self.systems.iter() {
+        for (i, system) in self.systems.iter().enumerate() {
             trace!("{}", i);
             system.on_update(self, assets, state);
-            i += 1;
         }
     }
 }

@@ -32,7 +32,7 @@ impl MeshRenderingComponent {
             model_allocator: SubbufferAllocator::new(
                 allocators.standard_memory_allocator.clone(),
                 SubbufferAllocatorCreateInfo {
-                    buffer_usage: BufferUsage::STORAGE_BUFFER,
+                    buffer_usage: BufferUsage::UNIFORM_BUFFER,
                     memory_type_filter: MemoryTypeFilter::PREFER_HOST
                         | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
@@ -231,13 +231,12 @@ impl RenderingComponent for MeshRenderingComponent {
                 .expect("Draw failed");
         }
 
-        for (_, (model_comp, transform)) in entities.query::<(&ModelComponent, &Transform)>().iter() {
+        for (_, (model_comp, transform)) in entities.query::<(&ModelComponent, &Transform)>().iter()
+        {
             let model = assets.models.get(&model_comp.model_uuid).unwrap();
             for (mesh_uuid, material_uuid) in model.meshes_and_materials.iter() {
                 let model = ModelData {
-                    translation: Matrix4f::translation(
-                        (transform.position - camera_pos).into(),
-                    ),
+                    translation: Matrix4f::translation((transform.position - camera_pos).into()),
                     rotation: transform.rotation.to_matrix(),
                     scale: Matrix4f::scale(transform.scale),
                 };

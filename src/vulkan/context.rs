@@ -70,6 +70,7 @@ impl VulkanContext {
             runtime_descriptor_array: true,
             sampler_anisotropy: true,
             fill_mode_non_solid: true,
+            shader_float64: true,
             ..Features::empty()
         };
         let extensions = DeviceExtensions {

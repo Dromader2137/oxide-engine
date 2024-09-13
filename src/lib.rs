@@ -99,6 +99,7 @@ pub fn run(mut world: World, asset_descriptions: AssetDescriptions) {
     world.start(&mut assets, &mut state);
 
     event_loop.event_loop.set_control_flow(ControlFlow::Poll);
+    #[allow(deprecated)]
     event_loop
         .event_loop
         .run(move |event, elwt| match event {
