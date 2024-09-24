@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use image::{io::Reader, RgbaImage};
+use image::{ImageReader, RgbaImage};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct Texture {
 impl Texture {
     pub fn new(name: String) -> Texture {
         debug!("Loading texture {}", format!("assets/textures/{}", name));
-        let image = Reader::open(format!("assets/textures/{}", name))
+        let image = ImageReader::open(format!("assets/textures/{}", name))
             .unwrap()
             .with_guessed_format()
             .unwrap()
@@ -250,12 +250,7 @@ fn default_texture(state: &State) -> Texture {
 
 impl System for DefaultTextureLoader {
     fn on_start(&self, _world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        if assets
-            .textures
-            .iter()
-            .find(|(_, x)| x.name == "default".to_string())
-            .is_none()
-        {
+        if !assets.textures.iter().any(|(_, x)| x.name == *"default") {
             assets.textures.insert(Uuid::new_v4(), default_texture(state));
         }
     }

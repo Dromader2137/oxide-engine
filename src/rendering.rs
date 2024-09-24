@@ -1,20 +1,17 @@
-use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
-use std::usize;
+use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
 
-use log::{debug, error};
+use log::{error, trace, warn};
 
+use render_meshes::MeshRenderingComponent;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, DrawIndirectCommand,
-    PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents,
 };
 use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::
@@ -31,7 +28,7 @@ use vulkano::pipeline::graphics::depth_stencil::{CompareOp, DepthState, DepthSte
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::{PolygonMode, RasterizationState};
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition, VertexInputState};
+use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
@@ -48,7 +45,6 @@ use vulkano::sync::{self, GpuFuture};
 use vulkano::{Validated, VulkanError};
 
 use winit::dpi::PhysicalSize;
-use winit::window::WindowBuilder;
 
 use crate::asset_library::AssetLibrary;
 use crate::ecs::{System, World};
@@ -56,10 +52,8 @@ use crate::state::State;
 use crate::types::camera::Camera;
 use crate::types::material::RenderingType;
 use crate::types::matrices::*;
-use crate::types::mesh::{DynamicMesh, DynamicMeshRenderingComponent};
-use crate::types::model::ModelComponent;
+use crate::types::position::Position;
 use crate::types::shader::{Shader, ShaderType};
-use crate::types::transform::{ModelData, Transform};
 use crate::types::vectors::*;
 use crate::ui::ui_layout::UiVertexData;
 use crate::ui::ui_rendering::UiRenderingComponent;
@@ -69,6 +63,7 @@ use crate::vulkan::memory::MemoryAllocators;
 use self::rendering_component::RenderingComponent;
 
 pub mod rendering_component;
+pub mod render_meshes;
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug, Serialize, Deserialize, Vertex)]
 #[repr(C)]
@@ -98,7 +93,8 @@ pub struct Window {
 impl Window {
     pub fn new(event_loop: &EventLoop) -> Window {
         Window {
-            window_handle: Arc::new(WindowBuilder::new().build(&event_loop.event_loop).unwrap()),
+            #[allow(deprecated)]
+            window_handle: Arc::new(event_loop.event_loop.create_window(winit::window::Window::default_attributes()).unwrap()),
         }
     }
 }
@@ -157,7 +153,7 @@ pub struct Renderer {
     pub viewport: Viewport,
 
     pub vp_data: VPData,
-    pub vp_pos: Vec3d,
+    pub vp_pos: Position,
     pub vp_buffers: Vec<Subbuffer<VPData>>,
 
     pub window_resized: bool,
@@ -165,7 +161,6 @@ pub struct Renderer {
     pub frames_in_flight: usize,
 
     pub fences: Vec<Fence>,
-    pub mesh_cache: Vec<Vec<(Arc<Subbuffer<[VertexData]>>, Arc<Subbuffer<[u32]>>)>>,
     pub previous_fence: usize,
 
     pub pipelines: HashMap<PipelineIdentifier, Arc<GraphicsPipeline>>,
@@ -208,7 +203,7 @@ fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Render
 
 fn get_framebuffers(
     device: Arc<Device>,
-    images: &Vec<Arc<Image>>,
+    images: &[Arc<Image>],
     render_pass: Arc<RenderPass>,
 ) -> Vec<Arc<Framebuffer>> {
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
@@ -260,7 +255,7 @@ fn get_framebuffers(
             )
             .unwrap()
         })
-        .collect::<Vec<_>>()
+    .collect::<Vec<_>>()
 }
 
 pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader, polygon_mode: PolygonMode) -> Arc<GraphicsPipeline> {
@@ -271,7 +266,7 @@ pub fn get_pipeline(state: &State, vs: &Shader, fs: &Shader, polygon_mode: Polyg
     
     let vertex_input = match vertex_type {
         ShaderType::Vertex => {
-            VertexInputState::new()
+            VertexData::per_vertex().definition(&vs.info().input_interface).unwrap()
         },
         ShaderType::UiVertex => {
             UiVertexData::per_vertex().definition(&vs.info().input_interface).unwrap()
@@ -432,7 +427,7 @@ fn recalculate_projection(world: &World, state: &mut State, new_dimensions: Phys
     );
 }
 
-fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut State) {
+fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut State) -> bool {
     if state.renderer.window_resized || state.renderer.recreate_swapchain {
         state.renderer.recreate_swapchain = false;
         state.renderer.window_resized = false;
@@ -459,11 +454,15 @@ fn handle_possible_resize(world: &World, assets: &AssetLibrary, state: &mut Stat
 
         recalculate_projection(world, state, new_dimensions);
         recreate_pipelines(assets, state);
+        true
+    } else {
+        false
     }
 }
 
 #[allow(clippy::arc_with_non_send_sync)]
 fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
+    if state.renderer.window_resized || state.renderer.recreate_swapchain { return; }
     let (image_i, suboptimal, acquire_future) =
         match swapchain::acquire_next_image(state.renderer.swapchain.clone(), None)
             .map_err(Validated::unwrap)
@@ -471,8 +470,9 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             Ok(r) => r,
             Err(VulkanError::OutOfDate) => {
                 state.renderer.recreate_swapchain = true;
+                warn!("Swapchain out of date");
                 return;
-            }
+            },
             Err(e) => panic!("failed to acquire next image: {e}"),
         };
 
@@ -494,7 +494,13 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
     };
     
     if let Some(image_fence) = &state.renderer.fences[image_i as usize] {
-        image_fence.wait(None).unwrap();
+        match image_fence.wait(Some(Duration::from_secs(1))) {
+            Ok(_) => {},
+            Err(e) => {
+                error!("{}", e);
+                return;
+            }
+        }
     }
 
     {
@@ -506,7 +512,6 @@ fn render(world: &World, assets: &mut AssetLibrary, state: &mut State) {
             .write()
             .unwrap();
         *contents = state.renderer.vp_data;
-        drop(contents);
     }
     
     let future = previous_future
@@ -580,7 +585,7 @@ impl Renderer {
             view: Matrix4f::indentity(),
             projection: Matrix4f::indentity(),
         };
-        let vp_pos = Vec3d::new([0.0, 0.0, 0.0]);
+        let vp_pos = Position::default();
 
         Renderer {
             render_pass,
@@ -598,10 +603,9 @@ impl Renderer {
             vp_buffers,
             pipelines: HashMap::new(),
             rendering_components: vec![
-                Box::new(DynamicMeshRenderingComponent { dynamic_mesh_data: RefCell::new(HashMap::new()) }),
+                Box::new(MeshRenderingComponent::new(memory_allocators)),
                 Box::new(UiRenderingComponent {})
             ],
-            mesh_cache: vec![Vec::new(); frames_in_flight],
             anisotropic: Some(context.physical_device.properties().max_sampler_anisotropy)
         }
     }
@@ -612,7 +616,8 @@ pub struct RendererHandler {}
 impl System for RendererHandler {
     fn on_start(&self, _world: &World, _assets: &mut AssetLibrary, _state: &mut State) {}
     fn on_update(&self, world: &World, assets: &mut AssetLibrary, state: &mut State) {
-        handle_possible_resize(world, assets, state);
-        render(world, assets, state);
+        if !handle_possible_resize(world, assets, state) {
+            render(world, assets, state);
+        }
     }
 }

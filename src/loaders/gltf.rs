@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, usize};
+use std::{collections::HashMap, path::Path};
 
 use gltf::accessor::DataType;
 use log::debug;
@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::{asset_library::AssetLibrary, rendering::VertexData, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, mesh::Mesh, quaternion::Quat, texture::Texture, vectors::{Vec2f, Vec3f, Vec4f}}};
 
+#[allow(clippy::result_unit_err)]
 pub fn load_gltf(
     model_name: String,
     assets: &mut AssetLibrary
@@ -81,7 +82,7 @@ pub fn load_gltf(
             vec![color_texture, normal_texture],
             Some(
                 MaterialParameters {
-                    diffuse_color: Vec3f::new([1.0, 1.0, 1.0]),
+                    diffuse_color: Vec4f::new(material.pbr_metallic_roughness().base_color_factor()).into(),
                     use_diffuse_texture: use_color,
                     use_normal_texture: use_normal
                 }
@@ -130,31 +131,19 @@ pub fn load_gltf(
             let material_name = assets.materials.get(&mat).unwrap().name.clone();
            
             let (_, postition_attribute) = prim.attributes().find(|(attr, _)| {
-                match attr {
-                    gltf::Semantic::Positions => true,
-                    _ => false
-                }
+                matches!(attr, gltf::Semantic::Positions)
             }).expect("Positions requiered");
 
             let normal_result = prim.attributes().find(|(attr, _)| {
-                match attr {
-                    gltf::Semantic::Normals => true,
-                    _ => false
-                }
+                matches!(attr, gltf::Semantic::Normals)
             });
             
             let uv_result = prim.attributes().find(|(attr, _)| {
-                match attr {
-                    gltf::Semantic::TexCoords(0) => true,
-                    _ => false
-                }
+                matches!(attr, gltf::Semantic::TexCoords(0))
             });
             
             let tangent_result = prim.attributes().find(|(attr, _)| {
-                match attr {
-                    gltf::Semantic::Tangents => true,
-                    _ => false
-                }
+                matches!(attr, gltf::Semantic::Tangents)
             });
 
             let positions = {

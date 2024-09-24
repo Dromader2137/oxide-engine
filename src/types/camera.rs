@@ -17,12 +17,12 @@ impl System for CameraUpdater {
 
         let mut query = entities.query::<(&Camera, &Transform)>();
         let transform_data = query.iter().next().expect("Camera with trasform not found!").1.1;
-        let cam_rot = transform_data.rotation.to_matrix();
+        let cam_rot = transform_data.rotation;
         state.renderer.vp_pos = transform_data.position;
         state.renderer.vp_data.view = Matrix4f::look_at(
             Vec3f::new([0.0, 0.0, 0.0]),
-            cam_rot.vec_mul_inv(Vec3f::new([0.0, 0.0, -1.0])),
-            cam_rot.vec_mul_inv(Vec3f::new([0.0, 1.0, 0.0])),
+            cam_rot * Vec3f::new([0.0, 0.0, -1.0]),
+            cam_rot * Vec3f::new([0.0, 1.0, 0.0]),
         );
     }
 }

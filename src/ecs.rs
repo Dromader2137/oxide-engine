@@ -1,7 +1,6 @@
-use std::{borrow::Borrow, cell::{Cell, Ref, RefCell}, collections::HashMap, rc::Rc, time::Instant};
+use std::{cell::RefCell, collections::HashMap};
 
-use hecs::{DynamicBundle, Query, QueryBorrow, QueryIter};
-use log::debug;
+use log::trace;
 use uuid::Uuid;
 
 use crate::{asset_library::AssetLibrary, state::State};
@@ -41,13 +40,15 @@ impl World {
     }
 
     pub fn start(&mut self, assets: &mut AssetLibrary, state: &mut State) {
-        for system in self.systems.iter() {
+        for (i, system) in self.systems.iter().enumerate() {
+            trace!("{}", i);
             system.on_start(self, assets, state);
         }
     }
 
     pub fn update(&mut self, assets: &mut AssetLibrary, state: &mut State) {
-        for system in self.systems.iter() {
+        for (i, system) in self.systems.iter().enumerate() {
+            trace!("{}", i);
             system.on_update(self, assets, state);
         }
     }

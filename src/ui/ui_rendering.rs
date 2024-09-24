@@ -1,6 +1,6 @@
 use vulkano::{pipeline::{Pipeline, PipelineBindPoint}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}};
-
-use crate::{asset_library::AssetLibrary, ecs::World, rendering::{rendering_component::RenderingComponent, PipelineIdentifier}, state::State, types::material::{Attachment, RenderingType}};
+ 
+use crate::{asset_library::AssetLibrary, ecs::World, rendering::{rendering_component::RenderingComponent, PipelineIdentifier}, state::State, types::material::Attachment};
 
 pub struct UiRenderingComponent {}
 
@@ -21,7 +21,7 @@ impl RenderingComponent for UiRenderingComponent {
                     StandardCommandBufferAllocator
         > {
             
-        for ui_layout in assets.ui.elements.iter() {
+        for (_, ui_layout) in assets.ui.iter() {
             let material = assets.materials.get(&ui_layout.material).unwrap();
             let pipeline = state.renderer.pipelines.get(&PipelineIdentifier::new(material.vertex_shader, material.fragment_shader, material.rendering_type)).unwrap().clone();
             let material_set = PersistentDescriptorSet::new(
@@ -53,7 +53,7 @@ impl RenderingComponent for UiRenderingComponent {
                                 )
                             },
                             Attachment::DefaultTexture => {
-                                let (_, tex) = assets.textures.iter().find(|(_, x)| x.name == "default".to_string()).unwrap();
+                                let (_, tex) = assets.textures.iter().find(|(_, x)| x.name == *"default").unwrap();
                                 WriteDescriptorSet::image_view_sampler(
                                     id as u32,
                                     tex.image_view.as_ref().unwrap().clone(),
@@ -70,8 +70,8 @@ impl RenderingComponent for UiRenderingComponent {
             };
             
             let mut sets = vec![material_set];
-            if attachment_set.is_some() {
-                sets.push(attachment_set.unwrap());
+            if let Some(attachment_set) = attachment_set {
+                sets.push(attachment_set);
             }
 
             builder.bind_pipeline_graphics(pipeline.clone()).unwrap();

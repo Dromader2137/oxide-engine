@@ -7,14 +7,13 @@ use crate::{
     types::{quaternion::Quat, vectors::*},
 };
 
-use super::matrices::Matrix4f;
+use super::{matrices::Matrix4f, position::Position};
 
 #[derive(Clone)]
 pub struct Transform {
-    pub position: Vec3d,
+    pub position: Position,
     pub scale: Vec3f,
     pub rotation: Quat,
-    pub changed: bool
 }
 
 #[repr(C)]
@@ -26,12 +25,11 @@ pub struct ModelData {
 }
 
 impl Transform {
-    pub fn new(pos: Vec3d, scl: Vec3f, rot: Quat) -> Transform {
+    pub fn new(position: Position, scale: Vec3f, rotation: Quat) -> Transform {
         Transform {
-            position: pos,
-            scale: scl,
-            rotation: rot,
-            changed: false
+            position,
+            scale,
+            rotation,
         }
     }
 

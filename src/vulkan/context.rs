@@ -49,11 +49,7 @@ fn select_physical_device(
 
             debug!("Selected queues main:{:?}, transfer:{:?}", gq, tq);
 
-            if gq.is_some() {
-                Some((p, gq.unwrap(), tq))
-            } else {
-                None
-            }
+            gq.map(|gq| (p, gq, tq))
         })
         .min_by_key(|(p, _, _)| match p.properties().device_type {
             PhysicalDeviceType::DiscreteGpu => 0,
@@ -69,17 +65,12 @@ impl VulkanContext {
     pub fn new(window: &Window) -> VulkanContext {
         let features = Features {
             shader_draw_parameters: true,
-            multi_draw_indirect: true,
-            buffer_device_address: true,
-            runtime_descriptor_array: true,
             sampler_anisotropy: true,
             fill_mode_non_solid: true,
             ..Features::empty()
         };
         let extensions = DeviceExtensions {
             khr_swapchain: true,
-            khr_shader_draw_parameters: true,
-            khr_buffer_device_address: true,
             ..Default::default()
         };
 
