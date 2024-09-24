@@ -65,18 +65,12 @@ impl VulkanContext {
     pub fn new(window: &Window) -> VulkanContext {
         let features = Features {
             shader_draw_parameters: true,
-            multi_draw_indirect: true,
-            buffer_device_address: true,
-            runtime_descriptor_array: true,
             sampler_anisotropy: true,
             fill_mode_non_solid: true,
-            shader_float64: true,
             ..Features::empty()
         };
         let extensions = DeviceExtensions {
             khr_swapchain: true,
-            khr_shader_draw_parameters: true,
-            khr_buffer_device_address: true,
             ..Default::default()
         };
 
