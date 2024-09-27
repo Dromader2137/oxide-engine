@@ -1,5 +1,3 @@
-pub mod asset_library;
-pub mod asset_descriptions;
 pub mod ecs;
 pub mod input;
 pub mod rendering;
@@ -10,11 +8,12 @@ pub mod vulkan;
 pub mod ui;
 pub mod physics;
 pub mod assets;
+pub mod engine_settings;
 
 use std::fs;
 use std::time::Instant;
 
-use asset_descriptions::AssetDescriptions;
+use assets::asset_descriptions::AssetDescriptions;
 use ecs::World;
 use input::{InputManager, InputManagerUpdater};
 use log::trace;

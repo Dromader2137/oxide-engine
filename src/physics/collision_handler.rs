@@ -10,7 +10,7 @@ impl System for CollisionHandler {
     fn on_start(
         &self,
         _world: &crate::ecs::World,
-        _assets: &mut crate::asset_library::AssetLibrary,
+        _assets: &mut crate::assets::asset_library::AssetLibrary,
         _state: &mut crate::state::State,
     ) {
     }
@@ -18,7 +18,7 @@ impl System for CollisionHandler {
     fn on_update(
         &self,
         world: &crate::ecs::World,
-        _assets: &mut crate::asset_library::AssetLibrary,
+        _assets: &mut crate::assets::asset_library::AssetLibrary,
         _state: &mut crate::state::State,
     ) {
         let entities = world.entities.borrow_mut();

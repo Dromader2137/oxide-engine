@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use vulkano::{buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::graphics::rasterization::PolygonMode};
 use uuid::Uuid;
 
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, state::State};
+use crate::{assets::asset_library::AssetLibrary, ecs::{System, World}, state::State};
 
 use super::vectors::Vec3f;
 

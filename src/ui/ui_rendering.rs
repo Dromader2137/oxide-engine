@@ -1,6 +1,6 @@
 use vulkano::{pipeline::{Pipeline, PipelineBindPoint}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}};
  
-use crate::{asset_library::AssetLibrary, ecs::World, rendering::{rendering_component::RenderingComponent, PipelineIdentifier}, state::State, types::material::Attachment};
+use crate::{assets::asset_library::AssetLibrary, ecs::World, rendering::{rendering_component::RenderingComponent, PipelineIdentifier}, state::State, types::material::Attachment};
 
 pub struct UiRenderingComponent {}
 

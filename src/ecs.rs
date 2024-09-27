@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap};
 use log::trace;
 use uuid::Uuid;
 
-use crate::{asset_library::AssetLibrary, state::State};
+use crate::{assets::asset_library::AssetLibrary, state::State};
 
 pub trait System {
     fn on_start(&self, world: &World, assets: &mut AssetLibrary, state: &mut State);

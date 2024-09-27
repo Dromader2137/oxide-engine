@@ -5,7 +5,7 @@ use uuid::Uuid;
 use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, device::Device, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}};
 use log::{debug, error};
 
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, loaders::{gltf::load_gltf, obj::load_obj}, rendering::VertexData, state::State};
+use crate::{assets::asset_library::AssetLibrary, ecs::{System, World}, loaders::{gltf::load_gltf, obj::load_obj}, rendering::VertexData, state::State};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Mesh {

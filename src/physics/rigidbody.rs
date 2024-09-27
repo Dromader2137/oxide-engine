@@ -39,9 +39,9 @@ impl Rigidbody {
 pub struct RigidbodyHandler {}
 
 impl System for RigidbodyHandler {
-    fn on_start(&self, _world: &crate::ecs::World, _assets: &mut crate::asset_library::AssetLibrary, _state: &mut crate::state::State) {}
+    fn on_start(&self, _world: &crate::ecs::World, _assets: &mut crate::assets::asset_library::AssetLibrary, _state: &mut crate::state::State) {}
 
-    fn on_update(&self, world: &crate::ecs::World, _assets: &mut crate::asset_library::AssetLibrary, state: &mut crate::state::State) {
+    fn on_update(&self, world: &crate::ecs::World, _assets: &mut crate::assets::asset_library::AssetLibrary, state: &mut crate::state::State) {
         let entities = world.entities.borrow_mut();
 
         for (_, (rigidbody, transform)) in entities.query::<(&mut Rigidbody, &mut Transform)>().iter() {

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
 
-use log::{error, trace, warn};
+use log::{error, warn};
 
 use render_meshes::MeshRenderingComponent;
 use serde::{Deserialize, Serialize};
@@ -46,7 +46,7 @@ use vulkano::{Validated, VulkanError};
 
 use winit::dpi::PhysicalSize;
 
-use crate::asset_library::AssetLibrary;
+use crate::assets::asset_library::AssetLibrary;
 use crate::ecs::{System, World};
 use crate::state::State;
 use crate::types::camera::Camera;
@@ -64,6 +64,10 @@ use self::rendering_component::RenderingComponent;
 
 pub mod rendering_component;
 pub mod render_meshes;
+pub mod render_model;
+pub mod renderer;
+pub mod renderer_graph;
+pub mod renderer_node;
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug, Serialize, Deserialize, Vertex)]
 #[repr(C)]

@@ -2,7 +2,7 @@ use std::{fs::File, io::Read, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use vulkano::shader::{spirv::bytes_to_words, ShaderModule, ShaderModuleCreateInfo};
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_pipeline, PipelineIdentifier}, state::State, vulkan::context::VulkanContext};
+use crate::{assets::asset_library::AssetLibrary, ecs::{System, World}, rendering::{get_pipeline, PipelineIdentifier}, state::State, vulkan::context::VulkanContext};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ShaderType {

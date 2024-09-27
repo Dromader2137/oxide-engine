@@ -9,7 +9,7 @@ use vulkano::{
 };
 
 use crate::{
-    asset_library::AssetLibrary,
+    assets::asset_library::AssetLibrary,
     state::State,
     types::{
         material::{Attachment, Material},
@@ -158,7 +158,7 @@ impl RenderingComponent for MeshRenderingComponent {
             vulkano::command_buffer::allocator::StandardCommandBufferAllocator,
         >,
         world: &crate::ecs::World,
-        assets: &crate::asset_library::AssetLibrary,
+        assets: &crate::assets::asset_library::AssetLibrary,
         state: &crate::state::State,
         image_id: usize,
     ) -> vulkano::command_buffer::AutoCommandBufferBuilder<

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{asset_library::AssetLibrary, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, model::Model, shader::{Shader, ShaderType}, texture::Texture, vectors::Vec2f}, ui::ui_layout::{Anchor, UiElement, UiElementType}};
+use crate::{assets::asset_library::AssetLibrary, types::{material::{Attachment, Material, MaterialParameters, RenderingType}, model::Model, shader::{Shader, ShaderType}, texture::Texture, vectors::Vec2f}, ui::ui_layout::{Anchor, UiElement, UiElementType}};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{asset_library::AssetLibrary, ecs::System};
+use crate::{assets::asset_library::AssetLibrary, ecs::System};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {

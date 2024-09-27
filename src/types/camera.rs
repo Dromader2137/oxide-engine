@@ -1,4 +1,4 @@
-use crate::{asset_library::AssetLibrary, ecs::{System, World}, state::State};
+use crate::{assets::asset_library::AssetLibrary, ecs::{System, World}, state::State};
 
 use super::{matrices::Matrix4f, transform::Transform, vectors::Vec3f};
 

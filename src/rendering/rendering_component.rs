@@ -1,6 +1,6 @@
 use vulkano::command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 
-use crate::{asset_library::AssetLibrary, ecs::World, state::State};
+use crate::{assets::asset_library::AssetLibrary, ecs::World, state::State};
 
 pub trait RenderingComponent {
     fn render(

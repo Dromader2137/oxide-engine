@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 
 use crate::{
-    asset_library::AssetLibrary,
+    assets::asset_library::AssetLibrary,
     ecs::{System, World},
     state::State,
     types::{quaternion::Quat, vectors::*},

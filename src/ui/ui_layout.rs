@@ -93,7 +93,7 @@ impl Default for UiElement {
 pub struct UiMeshBuilder {}
 
 impl System for UiMeshBuilder {
-    fn on_start(&self, _world: &crate::ecs::World, assets: &mut crate::asset_library::AssetLibrary, state: &mut crate::state::State) {
+    fn on_start(&self, _world: &crate::ecs::World, assets: &mut crate::assets::asset_library::AssetLibrary, state: &mut crate::state::State) {
         for (_, element) in assets.ui.iter_mut() {
             let mut mesh = element.generate_mesh(state);
             mesh.load(state);
@@ -101,7 +101,7 @@ impl System for UiMeshBuilder {
         }
     }
 
-    fn on_update(&self, _world: &crate::ecs::World, assets: &mut crate::asset_library::AssetLibrary, state: &mut crate::state::State) {
+    fn on_update(&self, _world: &crate::ecs::World, assets: &mut crate::assets::asset_library::AssetLibrary, state: &mut crate::state::State) {
         if !state.renderer.window_resized { return; }
         for (_, element) in assets.ui.iter_mut() {
             let mut mesh = element.generate_mesh(state);
@@ -114,9 +114,9 @@ impl System for UiMeshBuilder {
 pub struct UiHandler {}
 
 impl System for UiHandler {
-    fn on_start(&self, _world: &crate::ecs::World, _assets: &mut crate::asset_library::AssetLibrary, _state: &mut State) {}
+    fn on_start(&self, _world: &crate::ecs::World, _assets: &mut crate::assets::asset_library::AssetLibrary, _state: &mut State) {}
 
-    fn on_update(&self, world: &crate::ecs::World, assets: &mut crate::asset_library::AssetLibrary, state: &mut State) {
+    fn on_update(&self, world: &crate::ecs::World, assets: &mut crate::assets::asset_library::AssetLibrary, state: &mut State) {
         let window_size = Vec2f::new([state.window.window_handle.inner_size().width as f32, state.window.window_handle.inner_size().height as f32]);
         let normalized_position = (state.input.cursor_position / window_size - Vec2f::new([0.5, 0.5])) * 2.0;
 
