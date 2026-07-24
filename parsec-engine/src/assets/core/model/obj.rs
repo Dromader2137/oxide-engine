@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use parsec_engine_math::vec::{Vec2f, Vec3f};
+use parsec_engine_math::{uvec::{Vec2u, Vec3u}, vec::{Vec2f, Vec3f}};
 use thiserror::Error;
 
-use crate::assets::core::mesh::CookedMesh;
+use crate::assets::core::{mesh::CookedMesh, model::CookedModel};
 
 #[derive(Error, Debug)]
 pub enum LoadOBJError {
@@ -31,10 +31,11 @@ pub enum LoadOBJError {
     IndexNotSpecified,
 }
 
-pub fn cook_obj(data: &[u8]) -> Result<CookedMesh, LoadOBJError> {
+pub fn cook_obj(data: &[u8]) -> Result<CookedModel, LoadOBJError> {
     let mut positions: Vec<Vec3f> = Vec::new();
     let mut uvs: Vec<Vec2f> = Vec::new();
     let mut normals: Vec<Vec3f> = Vec::new();
+
     let mut out_positions: Vec<Vec3f> = Vec::new();
     let mut out_uvs: Vec<Vec2f> = Vec::new();
     let mut out_normals: Vec<Vec3f> = Vec::new();

@@ -10,7 +10,10 @@ use std::{
 use clap::Parser;
 
 use crate::{
-    assets::{Asset, AssetDescription, Manifest, core::{mesh::Mesh, shader::Shader}},
+    assets::{
+        Asset, AssetDescription, Manifest,
+        core::{mesh::Mesh, shader::Shader}, source_file::{AssetSourceFile, AssetSourceFileHandler},
+    },
     error::{OptionNoneErr, ParsecError},
 };
 
@@ -81,42 +84,46 @@ fn cook(
 ) -> Result<(), ParsecError> {
     let in_path = manifest.assets.iter().find(|a| a.0 == name).none_err()?;
     let out_path = get_cook_dir().join(name).with_extension("asset");
-    cooker.cook(&in_path.1.path, &out_path);
+    cooker.cook(&in_path.1, &out_path);
     Ok(())
 }
 
-pub struct CookerAssetRegistation {
-    extensions: &'static [&'static str],
-    cook_fn: Box<fn(&[u8], &str) -> Vec<u8>>,
-}
 
-pub struct Cooker {
-    handlers: HashMap<&'static str, CookerAssetRegistation>,
-}
-
-fn cook_type_erased<T: Asset>(data: &[u8], extension: &str) -> Vec<u8> {
-    let out = T::cook(data, extension);
+fn cook_type_erased<T: Asset>(
+    description: &AssetDescription,
+    source_file: &AssetSourceFile,
+) -> Vec<u8> {
+    let out = T::cook(description, source_file);
     let out_bytes = postcard::to_stdvec(&out).unwrap();
     out_bytes
 }
 
-impl Cooker {
-    pub fn new() -> Cooker {
-        Cooker {
-            handlers: HashMap::new(),
-        }
-    }
+pub struct CookerAssetRegistation {
+    cook_fn: Box<fn(&AssetDescription, &AssetSourceFile) -> Vec<u8>>,
+}
 
+pub struct CookerSourceFileRegistration {
+    extract_fn: Box<fn(&Path) -> Vec<AssetDescription>>
+}
+
+#[derive(Debug, Default)]
+pub struct Cooker {
+    handlers: HashMap<&'static str, CookerAssetRegistation>,
+    source_file_handler: HashMap<&'static str, CookerSourceFileRegistration>
+}
+
+
+impl Cooker {
     pub fn register<T: Asset>(&mut self) {
         let registation = CookerAssetRegistation {
-            extensions: T::EXTENSIONS,
             cook_fn: Box::new(cook_type_erased::<T>),
         };
         self.handlers.insert(T::ASSET_TYPE, registation);
     }
 
-    pub fn cook(&self, input: &Path, output: &Path) {
+    pub fn cook(&self, input: &AssetDescription, output: &Path) {
         let ext = input
+            .path
             .extension()
             .unwrap_or(&OsStr::new(""))
             .to_str()
@@ -126,10 +133,10 @@ impl Cooker {
             .iter()
             .find(|(_, v)| v.extensions.contains(&ext))
             .unwrap();
-        let bytes = std::fs::read(input).unwrap();
+        let bytes = std::fs::read(&input.path).unwrap();
         let out_bytes = (handler.cook_fn)(
             &bytes,
-            input.extension().unwrap().to_str().unwrap(),
+            input   
         );
         let mut out_file = File::options()
             .create(true)

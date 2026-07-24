@@ -1,7 +1,7 @@
 use parsec_engine_math::vec::{Vec2f, Vec3f};
 
 use crate::{
-    assets::{Asset, core::mesh::obj::cook_obj},
+    assets::{Asset, AssetDescription},
     create_counter,
     ecs::resources::Resources,
     error::OptionNoneErr,
@@ -12,8 +12,6 @@ use crate::{
         identifiable::{IdStore, Identifiable},
     },
 };
-
-pub mod obj;
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct CookedMesh {
@@ -83,13 +81,12 @@ impl Asset for Mesh {
     type Cooked = CookedMesh;
 
     const ASSET_TYPE: &'static str = "mesh";
-    const EXTENSIONS: &'static [&'static str] = &["obj"];
+    const EXTENSIONS: &'static [&'static str] = &[];
 
-    fn cook(data: &[u8], extension: &str) -> Self::Cooked {
-        if extension == "obj" {
-            let cooked = cook_obj(data).unwrap();
-            return cooked;
-        }
+    fn cook(
+        _data: &[u8],
+        _asset_description: &AssetDescription,
+    ) -> Self::Cooked {
         CookedMesh::default()
     }
 

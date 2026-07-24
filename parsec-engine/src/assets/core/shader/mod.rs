@@ -1,5 +1,5 @@
 use crate::{
-    assets::Asset,
+    assets::{Asset, AssetDescription},
     ecs::resources::Resources,
     error::OptionNoneErr,
     graphics::{
@@ -29,7 +29,13 @@ impl Asset for Shader {
     const ASSET_TYPE: &'static str = "shader";
     const EXTENSIONS: &'static [&'static str] = &["vert", "frag"];
 
-    fn cook(data: &[u8], extension: &str) -> Self::Cooked {
+    fn cook(data: &[u8], asset_description: &AssetDescription) -> Self::Cooked {
+        let extension = asset_description
+            .path
+            .extension()
+            .expect("shader has to have an extension")
+            .to_str()
+            .expect("shader has to have a valid utf-8 extension");
         // Compile GLSL -> SPV
         let text = String::from_utf8_lossy(data);
         let compiler = shaderc::Compiler::new().unwrap();
@@ -56,8 +62,10 @@ impl Asset for Shader {
     }
 
     fn load(cooked: Self::Cooked, resources: &mut Resources) -> Self {
-        let mut backend =
-            resources.get_mut::<ActiveGraphicsBackend>().none_err().unwrap();
+        let mut backend = resources
+            .get_mut::<ActiveGraphicsBackend>()
+            .none_err()
+            .unwrap();
         let shader_module = ShaderModuleBuilder::default()
             .shader_type(cooked.shader_type)
             .code(&cooked.code)
