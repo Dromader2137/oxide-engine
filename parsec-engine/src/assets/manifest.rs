@@ -1,7 +1,9 @@
+use crate::assets::{AssetDescription, source_file::AssetSourceFile};
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
     pub verison: u8,
-    pub files: Vec<SourceFile>,
+    pub files: Vec<AssetSourceFile>,
     pub assets: Vec<AssetDescription>
 }
 

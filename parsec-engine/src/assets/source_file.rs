@@ -1,7 +1,7 @@
 //! [AssetSourceFileHandler] takes in files and gets all the information about
 //! contained assets. For example an .obj file can contain multiple meshes.
 
-use std::path::{Path, PathBuf};
+use std::{collections::BTreeSet, path::{Path, PathBuf}};
 
 use crate::assets::AssetDescription;
 
@@ -12,6 +12,6 @@ pub trait AssetSourceFileHandler {
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct AssetSourceFile {
-    filepath: PathBuf,
-    asset_ids: Vec<u32>,
+    pub filepath: PathBuf,
+    pub asset_ids: BTreeSet<usize>,
 }

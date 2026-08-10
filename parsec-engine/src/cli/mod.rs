@@ -1,6 +1,5 @@
 use std::{
-    collections::HashMap,
-    ffi::OsStr,
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs::{self, File},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
@@ -11,15 +10,18 @@ use clap::Parser;
 
 use crate::{
     assets::{
-        Asset, AssetDescription, Manifest,
-        core::{mesh::Mesh, shader::Shader}, source_file::{AssetSourceFile, AssetSourceFileHandler},
+        Asset, AssetDescription,
+        core::{mesh::Mesh, shader::Shader},
+        manifest::Manifest,
+        source_file::{AssetSourceFile, AssetSourceFileHandler},
     },
     error::{OptionNoneErr, ParsecError},
 };
 
-/// parsec-engine-cli add <name> <path> // adds an asset
-/// parsec-engine-cli remove <name> // removes an asset
-/// parsec-engine-cli cook // cooks all assets
+/// parsec-engine-cli add <path> // adds an asset
+/// parsec-engine-cli rescan [<path>] // adds an asset
+/// parsec-engine-cli remove <path> // removes an asset
+/// parsec-engine-cli cook [<path>] // cooks all assets
 ///
 /// Example project structure:
 /// src/
@@ -41,9 +43,10 @@ struct Args {
 
 #[derive(Debug, clap::Subcommand)]
 enum Commands {
-    Add { name: String, path: PathBuf },
-    Remove { name: String },
-    Cook,
+    Add { path: PathBuf },
+    Remove { path: PathBuf },
+    Rescan { path: Option<PathBuf> },
+    Cook { path: Option<PathBuf> },
 }
 
 #[derive(Debug)]
@@ -88,7 +91,6 @@ fn cook(
     Ok(())
 }
 
-
 fn cook_type_erased<T: Asset>(
     description: &AssetDescription,
     source_file: &AssetSourceFile,
@@ -103,85 +105,83 @@ pub struct CookerAssetRegistation {
 }
 
 pub struct CookerSourceFileRegistration {
-    extract_fn: Box<fn(&Path) -> Vec<AssetDescription>>
+    extract_fn: Box<fn(&Path) -> Vec<AssetDescription>>,
 }
 
 #[derive(Debug, Default)]
 pub struct Cooker {
-    handlers: HashMap<&'static str, CookerAssetRegistation>,
-    source_file_handler: HashMap<&'static str, CookerSourceFileRegistration>
+    asset_handlers: HashMap<&'static str, CookerAssetRegistation>,
+    source_file_handler: HashMap<&'static str, CookerSourceFileRegistration>,
 }
 
-
 impl Cooker {
-    pub fn register<T: Asset>(&mut self) {
+    pub fn register_asset_type<T: Asset>(&mut self) {
         let registation = CookerAssetRegistation {
             cook_fn: Box::new(cook_type_erased::<T>),
         };
-        self.handlers.insert(T::ASSET_TYPE, registation);
+        self.asset_handlers.insert(T::ASSET_TYPE, registation);
     }
 
-    pub fn cook(&self, input: &AssetDescription, output: &Path) {
-        let ext = input
-            .path
-            .extension()
-            .unwrap_or(&OsStr::new(""))
-            .to_str()
-            .unwrap();
-        let (_, handler) = self
-            .handlers
-            .iter()
-            .find(|(_, v)| v.extensions.contains(&ext))
-            .unwrap();
-        let bytes = std::fs::read(&input.path).unwrap();
-        let out_bytes = (handler.cook_fn)(
-            &bytes,
-            input   
-        );
-        let mut out_file = File::options()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(output)
-            .unwrap();
-        out_file.write_all(&out_bytes).unwrap();
+    pub fn register_source_file_type<T: AssetSourceFileHandler>(&mut self) {
+        let registration = CookerSourceFileRegistration {
+            extract_fn: Box::new(T::extract_assets),
+        };
+        self.source_file_handler.insert(T::EXTENSION, registration);
     }
+
+    pub fn cook(&self, input: &AssetDescription, output: &Path) {}
+}
+
+fn rescan(manifest: &mut Manifest, path: &Path) {
+    let file = manifest
+        .files
+        .iter()
+        .find(|x| x.filepath == path)
+        .expect("Asset source file not found");
 }
 
 pub fn run_cli(mut cooker: Cooker) {
-    let args = Args::parse();
+    cooker.register_asset_type::<Mesh>();
+    cooker.register_asset_type::<Shader>();
 
+    let args = Args::parse();
     let mut manifest = Manifest::load();
-    cooker.register::<Mesh>();
-    cooker.register::<Shader>();
 
     match args.command {
-        Commands::Add { name, path } => {
-            if manifest.assets.contains_key(&name) {
-                println!("Asset with this name already existst");
-                return;
-            }
-            manifest.assets.insert(name.clone(), AssetDescription {
-                name: name.clone(),
-                path,
-                last_cooked: None,
+        Commands::Add { path } => {
+            let extension = path
+                .extension()
+                .expect("Asset source file should have an extension")
+                .to_str()
+                .expect("Asset source file extension should be valid UTF-8");
+            let handler = cooker
+                .source_file_handler
+                .get(extension)
+                .expect("Asset source file handler not provided");
+            let asset_descriptions = (handler.extract_fn)(&path);
+            let asset_ids = BTreeSet::from_iter(
+                manifest.assets.len()
+                    ..(manifest.assets.len() + asset_descriptions.len()),
+            );
+            manifest.files.push(AssetSourceFile {
+                filepath: path,
+                asset_ids,
             });
-            write_manifest(&manifest).unwrap();
-            println!("Added asset {}", name);
+            manifest.assets.extend_from_slice(&asset_descriptions);
         },
-        Commands::Remove { name } => {
-            if !manifest.assets.contains_key(&name) {
-                println!("Asset not found");
-                return;
+        Commands::Remove { path } => {
+            let (idx, file) = manifest
+                .files
+                .iter()
+                .enumerate()
+                .find(|(_, x)| x.filepath == path)
+                .expect("Asset source file not found");
+            for &asset in file.asset_ids.iter().rev() {
+                manifest.assets.remove(asset);
             }
-            manifest.assets.remove(&name);
-            println!("Removed asset {}", name);
+            manifest.files.swap_remove(idx);
         },
-        Commands::Cook => {
-            println!("Cooking...");
-            for name in manifest.assets.keys() {
-                cook(name, &manifest, &cooker).unwrap();
-            }
-        },
+        Commands::Rescan { path } => {},
+        Commands::Cook { path } => todo!(),
     }
 }
