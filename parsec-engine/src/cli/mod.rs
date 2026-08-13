@@ -1,7 +1,7 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     fs::{self, File},
-    io::{BufWriter, Write},
+    io::BufWriter,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -10,10 +10,7 @@ use clap::Parser;
 
 use crate::{
     assets::{
-        Asset, AssetDescription,
-        core::{mesh::Mesh, shader::Shader},
-        manifest::Manifest,
-        source_file::{AssetSourceFile, AssetSourceFileHandler},
+        Asset, AssetDescription, InitialAssetDescription, core::{mesh::Mesh, shader::Shader}, manifest::Manifest, source_file::{AssetSourceFile, AssetSourceFileHandler}
     },
     error::{OptionNoneErr, ParsecError},
 };
@@ -105,7 +102,7 @@ pub struct CookerAssetRegistation {
 }
 
 pub struct CookerSourceFileRegistration {
-    extract_fn: Box<fn(&Path) -> Vec<AssetDescription>>,
+    extract_fn: Box<fn(&Path) -> Vec<InitialAssetDescription>>,
 }
 
 #[derive(Debug, Default)]
@@ -132,12 +129,27 @@ impl Cooker {
     pub fn cook(&self, input: &AssetDescription, output: &Path) {}
 }
 
-fn rescan(manifest: &mut Manifest, path: &Path) {
+fn rescan(
+    manifest: &mut Manifest,
+    cooker: &Cooker,
+    path: &Path,
+) -> Result<bool, CliError> {
     let file = manifest
-        .files
+        .tracked_files
         .iter()
         .find(|x| x.filepath == path)
-        .expect("Asset source file not found");
+        .ok_or(CliError::AssetSourceFileNotFound(path.to_path_buf()))?;
+    let extension = file.filepath.extension().and_then(|x| x.to_str()).ok_or(
+        CliError::AssetSourceFileExtensionInvalid(path.to_path_buf()),
+    )?;
+    let handler = cooker
+        .source_file_handler
+        .get(extension)
+        .ok_or(CliError::HandlerNotFound(extension.to_string()))?;
+    let asset_descriptions = (handler.extract_fn)(&file.filepath);
+    for asset_description in asset_descriptions {
+        asset_description.
+    }
 }
 
 pub fn run_cli(mut cooker: Cooker) {
@@ -163,7 +175,7 @@ pub fn run_cli(mut cooker: Cooker) {
                 manifest.assets.len()
                     ..(manifest.assets.len() + asset_descriptions.len()),
             );
-            manifest.files.push(AssetSourceFile {
+            manifest.tracked_files.push(AssetSourceFile {
                 filepath: path,
                 asset_ids,
             });
@@ -171,7 +183,7 @@ pub fn run_cli(mut cooker: Cooker) {
         },
         Commands::Remove { path } => {
             let (idx, file) = manifest
-                .files
+                .tracked_files
                 .iter()
                 .enumerate()
                 .find(|(_, x)| x.filepath == path)
@@ -179,9 +191,15 @@ pub fn run_cli(mut cooker: Cooker) {
             for &asset in file.asset_ids.iter().rev() {
                 manifest.assets.remove(asset);
             }
-            manifest.files.swap_remove(idx);
+            manifest.tracked_files.swap_remove(idx);
         },
         Commands::Rescan { path } => {},
         Commands::Cook { path } => todo!(),
     }
+}
+
+pub enum CliError {
+    AssetSourceFileNotFound(PathBuf),
+    AssetSourceFileExtensionInvalid(PathBuf),
+    HandlerNotFound(String),
 }

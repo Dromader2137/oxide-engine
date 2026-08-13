@@ -3,11 +3,11 @@
 
 use std::{collections::BTreeSet, path::{Path, PathBuf}};
 
-use crate::assets::AssetDescription;
+use crate::assets::InitialAssetDescription;
 
 pub trait AssetSourceFileHandler {
     const EXTENSION: &'static str;
-    fn extract_assets(filepath: &Path) -> Vec<AssetDescription>;
+    fn extract_assets(filepath: &Path) -> Vec<InitialAssetDescription>;
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]

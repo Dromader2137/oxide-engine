@@ -3,7 +3,7 @@ use crate::assets::{AssetDescription, source_file::AssetSourceFile};
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
     pub verison: u8,
-    pub files: Vec<AssetSourceFile>,
+    pub tracked_files: Vec<AssetSourceFile>,
     pub assets: Vec<AssetDescription>
 }
 
@@ -11,7 +11,7 @@ impl Manifest {
     pub fn new() -> Self {
         Self {
             verison: 0,
-            files: Vec::new(),
+            tracked_files: Vec::new(),
             assets: Vec::new()
         }
     }

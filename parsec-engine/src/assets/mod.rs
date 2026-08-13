@@ -43,10 +43,16 @@ pub trait Asset: 'static {
     fn load(cooked: &Self::Cooked, resources: &mut Resources) -> Self;
 }
 
+pub struct InitialAssetDescription {
+    pub kind: String,
+    pub subresource: String
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AssetDescription {
-    name: String,
-    kind: String,
-    source_path: PathBuf,
-    source_subresource: String,
+    pub asset_id: u64,
+    pub asset_name: String,
+    pub asset_type: String,
+    pub source_file_path: PathBuf,
+    pub source_subresource: String,
 }
